@@ -145,9 +145,9 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
-      - name: Set up virtual audio device (headless Chromium needs a real sink for <audio> playback to advance)
+      - name: Set up virtual display + audio device
         run: |
-          sudo apt-get install -y pulseaudio
+          sudo apt-get install -y xvfb pulseaudio
           pulseaudio -D --exit-idle-time=-1 --disallow-exit
           sleep 1
           pactl load-module module-null-sink sink_name=DummyOutput
@@ -175,7 +175,12 @@ jobs:
           ./.venv/bin/pip install -r requirements.txt
 
       - name: Run the real pipeline through BullMQ instead of the DB-backed queue
-        run: npm run test:e2e
+        # Headed (via xvfb), not headless: headless Chromium does not
+        # reliably decode/advance <audio> playback in CI containers (a
+        # known, long-standing Chromium limitation, not a Playwright
+        # config issue) -- the real, full rendering+media pipeline only
+        # runs the same as local dev when a real display is attached.
+        run: xvfb-run --auto-servernum -- npm run test:e2e -- --headed
 
   e2e:
     name: End-to-end (Playwright, real pipeline)
@@ -215,9 +220,9 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
-      - name: Set up virtual audio device (headless Chromium needs a real sink for <audio> playback to advance)
+      - name: Set up virtual display + audio device
         run: |
-          sudo apt-get install -y pulseaudio
+          sudo apt-get install -y xvfb pulseaudio
           pulseaudio -D --exit-idle-time=-1 --disallow-exit
           sleep 1
           pactl load-module module-null-sink sink_name=DummyOutput
@@ -243,7 +248,12 @@ jobs:
           ./.venv/bin/pip install -r requirements.txt
 
       - name: Run Playwright e2e suite (starts api/web/worker itself)
-        run: npm run test:e2e
+        # Headed (via xvfb), not headless: headless Chromium does not
+        # reliably decode/advance <audio> playback in CI containers (a
+        # known, long-standing Chromium limitation, not a Playwright
+        # config issue) -- the real, full rendering+media pipeline only
+        # runs the same as local dev when a real display is attached.
+        run: xvfb-run --auto-servernum -- npm run test:e2e -- --headed
 
       - name: Upload Playwright report on failure
         if: failure()
