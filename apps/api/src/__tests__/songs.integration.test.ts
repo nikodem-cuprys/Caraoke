@@ -231,6 +231,31 @@ describe("song creation and processing pipeline", () => {
     expect(secondSong.body.lines[0].words[0].text).toBe("hello");
   });
 
+  it("the worker upload-url endpoint scopes keys to the job's own song and rejects mismatched ones", async () => {
+    const clientId = uniqueClientId();
+    const { songId, uploadRes } = await createSongAndUpload(clientId);
+    const jobId = uploadRes.body.jobId as string;
+
+    const missingKey = await request(app).get(`/internal/jobs/${jobId}/upload-url`).set("X-Worker-Secret", WORKER_SECRET);
+    expect(missingKey.status).toBe(400);
+
+    const wrongSong = await request(app)
+      .get(`/internal/jobs/${jobId}/upload-url`)
+      .query({ key: "songs/some-other-song/vocals.wav", contentType: "audio/wav" })
+      .set("X-Worker-Secret", WORKER_SECRET);
+    expect(wrongSong.status).toBe(403);
+
+    // The local storage provider has no upload-URL concept (the worker
+    // writes directly into the shared filesystem in local mode instead) --
+    // a correctly-scoped key still fails, but past the security check, and
+    // with a real error rather than silently returning something unusable.
+    const scopedKey = await request(app)
+      .get(`/internal/jobs/${jobId}/upload-url`)
+      .query({ key: `songs/${songId}/vocals.wav`, contentType: "audio/wav" })
+      .set("X-Worker-Secret", WORKER_SECRET);
+    expect(scopedKey.status).toBe(500);
+  });
+
   it("rejects a request with no audio file attached", async () => {
     const clientId = uniqueClientId();
     const createRes = await request(app)

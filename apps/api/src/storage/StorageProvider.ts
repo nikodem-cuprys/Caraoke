@@ -25,6 +25,16 @@ export interface StorageProvider {
   /** A URL the browser can use to fetch/stream the object directly. */
   getSignedUrl(key: string, expiresInSec?: number): Promise<string>;
 
+  /**
+   * A time-limited URL a caller can PUT raw bytes to, to write an object
+   * without going through this process. Used by the worker to upload the
+   * files it produces (stems, prepared audio, pitch/waveform JSON) when it
+   * has no filesystem in common with the API — i.e. only meaningful for
+   * remote object storage; the local provider has no use for it, since the
+   * worker writes directly into the shared storage root instead.
+   */
+  getUploadUrl(key: string, contentType: string, expiresInSec?: number): Promise<string>;
+
   exists(key: string): Promise<boolean>;
 
   deleteObject(key: string): Promise<void>;

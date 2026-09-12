@@ -65,6 +65,16 @@ class ApiClient:
         )
         resp.raise_for_status()
 
+    def get_upload_url(self, job_id: str, key: str, content_type: str) -> str:
+        resp = requests.get(
+            f"{self.base_url}/internal/jobs/{job_id}/upload-url",
+            headers=self.headers,
+            params={"key": key, "contentType": content_type},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        return resp.json()["uploadUrl"]
+
     def submit_lyrics(self, job_id: str, language: str, language_confidence: float, lines: list[dict]) -> None:
         resp = requests.post(
             f"{self.base_url}/internal/jobs/{job_id}/lyrics",

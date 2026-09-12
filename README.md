@@ -297,7 +297,18 @@ by `STORAGE_PROVIDER`:
   directly instead of downloading them over HTTP.
 - **s3**: any S3-compatible store (AWS S3, or the MinIO container in
   `docker-compose.yml`). Objects are private by default; the API hands out
-  presigned GET URLs the same way.
+  presigned GET URLs the same way. In this mode the API and worker share no
+  filesystem, so the worker downloads the source upload via a presigned GET
+  (`sourceAudioSignedUrl`) and uploads every asset it produces (prepared
+  reference, stems, pitch/waveform JSON) via a presigned PUT it requests
+  from `GET /internal/jobs/:jobId/upload-url` — that endpoint checks the
+  requested key is scoped to the job's own song before signing anything, so
+  a buggy or compromised worker can't obtain a write URL for arbitrary
+  objects. See `apps/worker/singlearn_worker/run_pipeline.py`'s
+  `finalize_asset`/`_download_source_audio` and
+  `tests/test_pipeline_remote_storage.py` (a local HTTP server standing in
+  for the object store, so this path is covered without needing a real
+  S3/MinIO instance in CI).
 
 ## Tests
 
@@ -374,19 +385,14 @@ file from local TTS + a synthesized chord.
 - `BullMqQueueProvider` is exercised by a dedicated CI job against a real
   Redis service container (`.github/workflows/ci.yml`'s `bullmq-smoke-test`
   job) — switching `QUEUE_PROVIDER=bullmq` is safe to rely on.
-- **`STORAGE_PROVIDER=s3` is implemented on the API side only (uploads,
-  presigned GET URLs) — the worker does not support it yet.** The API hands
-  the worker a `sourceAudioSignedUrl` when storage is S3-backed, but
-  `run_pipeline.py` never downloads it (it only reads
-  `sourceAudioLocalPath`, which is `null` in S3 mode) and there is no
-  presigned-*PUT* mechanism for the worker to upload the assets it produces
-  (stems, prepared audio, pitch/waveform JSON) back to S3 — `register_asset`
-  only records a storage key, it never transfers bytes. In S3 mode the
-  worker fails fast with a clear `PipelineError` at the start of
-  `run_job()` rather than silently corrupting state, but the S3 path is not
-  actually usable end-to-end until that worker-side download/upload logic
-  is added. `STORAGE_PROVIDER=local` (the default) is fully implemented and
-  is what both the automated tests and the `bullmq-smoke-test` CI job use.
+- `STORAGE_PROVIDER=s3` is implemented end-to-end, including the worker's
+  side (download via presigned GET, upload every produced asset via
+  presigned PUT — see [Object storage](#object-storage)), and covered by
+  `apps/worker/tests/test_pipeline_remote_storage.py` against a fake local
+  object store. It has not, however, been run against a real S3/MinIO
+  instance in CI (unlike `bullmq-smoke-test`'s real Redis) — do a manual
+  smoke test against `docker-compose.yml`'s MinIO before relying on it in
+  production.
 
 ## Repository structure
 

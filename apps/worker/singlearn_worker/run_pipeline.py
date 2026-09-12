@@ -13,6 +13,7 @@ import json
 import os
 import traceback
 
+import requests
 import soundfile as sf
 
 from .api_client import ApiClient
@@ -37,6 +38,44 @@ class PipelineError(RuntimeError):
         self.stage = stage
 
 
+# Maps the browser-reported upload MIME type to a file extension so the
+# downloaded temp file gives ffmpeg's demuxer a hint (content-based probing
+# alone is usually enough, but a correct extension is more reliable for
+# container formats like mp4/webm that can hold either audio or video).
+_EXTENSION_BY_MIME_TYPE = {
+    "audio/wav": ".wav",
+    "audio/x-wav": ".wav",
+    "audio/mpeg": ".mp3",
+    "audio/mp4": ".m4a",
+    "audio/x-m4a": ".m4a",
+    "audio/ogg": ".ogg",
+    "audio/flac": ".flac",
+    "video/mp4": ".mp4",
+    "video/webm": ".webm",
+    "video/quicktime": ".mov",
+}
+
+
+def _download_source_audio(job: dict, job_work_dir: str) -> str:
+    """Downloads the original upload from its presigned URL into a local
+    temp file, mirroring what a shared filesystem gives PREPARE_AUDIO for
+    free when STORAGE_PROVIDER=local. Used only when the worker and API
+    don't share a filesystem (e.g. STORAGE_PROVIDER=s3)."""
+    signed_url = job.get("sourceAudioSignedUrl")
+    if not signed_url:
+        raise PipelineError(
+            "PREPARE_AUDIO", "Job has neither sourceAudioLocalPath nor sourceAudioSignedUrl - nothing to process."
+        )
+    extension = _EXTENSION_BY_MIME_TYPE.get(job.get("sourceAudioMimeType", ""), "")
+    dest_path = os.path.join(job_work_dir, f"source_original{extension}")
+    response = requests.get(signed_url, stream=True, timeout=120)
+    response.raise_for_status()
+    with open(dest_path, "wb") as fh:
+        for chunk in response.iter_content(chunk_size=1024 * 1024):
+            fh.write(chunk)
+    return dest_path
+
+
 def run_job(job: dict, api: ApiClient) -> None:
     job_id = job["jobId"]
     os.makedirs(config.work_dir, exist_ok=True)
@@ -45,14 +84,13 @@ def run_job(job: dict, api: ApiClient) -> None:
 
     storage_root = job.get("storageLocalRoot")
     storage_prefix = job["storageKeyPrefix"]
-    if not storage_root:
-        raise PipelineError(
-            "PREPARE_AUDIO",
-            "This worker build only supports STORAGE_PROVIDER=local (same-machine dev/deploy). "
-            "For S3-backed deployments, download sourceAudioSignedUrl to a temp file here first.",
-        )
-    song_output_dir = os.path.join(storage_root, storage_prefix)
-    os.makedirs(song_output_dir, exist_ok=True)
+    # Local mode: the API and worker share a filesystem, so every stage
+    # writes straight into the shared storage root and nothing needs
+    # uploading. Remote mode (e.g. S3): there is no shared filesystem, so
+    # the source audio is downloaded up front and every produced asset is
+    # written to a local temp dir first, then uploaded via a presigned URL
+    # (see finalize_asset below).
+    remote_storage = not storage_root
 
     def stage(name: str, detail: str | None = None):
         api.update_stage(job_id, name, "running", detail=detail)
@@ -63,14 +101,34 @@ def run_job(job: dict, api: ApiClient) -> None:
     def asset_key(filename: str) -> str:
         return f"{storage_prefix}{filename}"
 
+    def finalize_asset(local_path: str, filename: str, content_type: str) -> None:
+        """Uploads a just-written local file to object storage in remote
+        mode; a no-op in local mode, where song_output_dir already IS the
+        shared storage root the API serves from."""
+        if not remote_storage:
+            return
+        upload_url = api.get_upload_url(job_id, asset_key(filename), content_type)
+        with open(local_path, "rb") as fh:
+            response = requests.put(upload_url, data=fh, headers={"Content-Type": content_type}, timeout=120)
+        response.raise_for_status()
+
     try:
+        if remote_storage:
+            song_output_dir = job_work_dir
+            source_audio_path = _download_source_audio(job, job_work_dir)
+        else:
+            song_output_dir = os.path.join(storage_root, storage_prefix)
+            os.makedirs(song_output_dir, exist_ok=True)
+            source_audio_path = job["sourceAudioLocalPath"]
+
         # ---- PREPARE_AUDIO ----
         stage("PREPARE_AUDIO", "Normalizing audio to a consistent sample rate/format")
         prepared_path = os.path.join(song_output_dir, "prepared_reference.wav")
-        prepared = prepare_audio(job["sourceAudioLocalPath"], prepared_path)
+        prepared = prepare_audio(source_audio_path, prepared_path)
         api.register_asset(
             job_id, "prepared_reference", asset_key("prepared_reference.wav"), "audio/wav", prepared.duration_sec
         )
+        finalize_asset(prepared_path, "prepared_reference.wav", "audio/wav")
         done("PREPARE_AUDIO", f"{prepared.duration_sec:.1f}s reference track prepared")
 
         # ---- SEPARATE_STEMS ----
@@ -78,14 +136,18 @@ def run_job(job: dict, api: ApiClient) -> None:
         separator = get_separation_provider(config.separation_engine)
         separation = separator.separate(prepared.path, job_work_dir)
         if separation.available:
-            vocals_key = asset_key("vocals.wav")
-            instrumental_key = asset_key("instrumental.wav")
-            _copy_into_storage(separation.vocals_path, os.path.join(storage_root, vocals_key))
-            _copy_into_storage(separation.instrumental_path, os.path.join(storage_root, instrumental_key))
-            api.register_asset(job_id, "vocals", vocals_key, "audio/wav", provider_name=separation.engine)
-            api.register_asset(job_id, "instrumental", instrumental_key, "audio/wav", provider_name=separation.engine)
+            vocals_path = os.path.join(song_output_dir, "vocals.wav")
+            instrumental_path = os.path.join(song_output_dir, "instrumental.wav")
+            _copy_into_storage(separation.vocals_path, vocals_path)
+            _copy_into_storage(separation.instrumental_path, instrumental_path)
+            api.register_asset(job_id, "vocals", asset_key("vocals.wav"), "audio/wav", provider_name=separation.engine)
+            api.register_asset(
+                job_id, "instrumental", asset_key("instrumental.wav"), "audio/wav", provider_name=separation.engine
+            )
+            finalize_asset(vocals_path, "vocals.wav", "audio/wav")
+            finalize_asset(instrumental_path, "instrumental.wav", "audio/wav")
             done("SEPARATE_STEMS", f"Separated with {separation.engine}")
-            vocals_path_for_analysis = separation.vocals_path
+            vocals_path_for_analysis = vocals_path
         else:
             done("SEPARATE_STEMS", "Separation unavailable in this deployment; analyzing the mixed track instead")
             vocals_path_for_analysis = separation.vocals_path
@@ -126,10 +188,11 @@ def run_job(job: dict, api: ApiClient) -> None:
         for point in pitch_json:
             if point["frequencyHz"]:
                 point["midi"] = hz_to_midi(point["frequencyHz"])
-        pitch_asset_path = os.path.join(storage_root, asset_key("pitch_frames.json"))
+        pitch_asset_path = os.path.join(song_output_dir, "pitch_frames.json")
         with open(pitch_asset_path, "w", encoding="utf-8") as fh:
             json.dump(pitch_json, fh)
         api.register_asset(job_id, "pitch_frames_json", asset_key("pitch_frames.json"), "application/json")
+        finalize_asset(pitch_asset_path, "pitch_frames.json", "application/json")
         done("DETECT_PITCH", f"{len(smoothed_frames)} pitch frames analyzed")
 
         # ---- SIMPLIFY_MELODY ----
@@ -214,7 +277,7 @@ def run_job(job: dict, api: ApiClient) -> None:
         stage("GENERATE_WAVEFORM", "Building the waveform overview")
         ref_audio, ref_sr = sf.read(prepared.path, always_2d=False)
         waveform = generate_waveform(ref_audio, ref_sr)
-        waveform_asset_path = os.path.join(storage_root, asset_key("waveform.json"))
+        waveform_asset_path = os.path.join(song_output_dir, "waveform.json")
         with open(waveform_asset_path, "w", encoding="utf-8") as fh:
             json.dump(
                 {
@@ -225,6 +288,7 @@ def run_job(job: dict, api: ApiClient) -> None:
                 fh,
             )
         api.register_asset(job_id, "waveform_json", asset_key("waveform.json"), "application/json")
+        finalize_asset(waveform_asset_path, "waveform.json", "application/json")
         done("GENERATE_WAVEFORM", f"{len(waveform.peaks)} peaks generated")
 
         # ---- BUILD_KARAOKE / COMPLETE ----

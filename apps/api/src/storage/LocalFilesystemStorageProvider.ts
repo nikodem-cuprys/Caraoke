@@ -50,6 +50,13 @@ export class LocalFilesystemStorageProvider implements StorageProvider {
     return `${this.publicBaseUrl}${signAssetPath(key, expiresInSec)}`;
   }
 
+  async getUploadUrl(): Promise<string> {
+    throw new Error(
+      "LocalFilesystemStorageProvider has no upload-URL concept: the API and worker share this filesystem " +
+        "directly, so the worker writes finished assets straight into the storage root instead of uploading them."
+    );
+  }
+
   async exists(key: string): Promise<boolean> {
     return fs.existsSync(this.fullPath(key));
   }

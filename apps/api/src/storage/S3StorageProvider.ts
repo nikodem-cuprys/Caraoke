@@ -56,6 +56,14 @@ export class S3StorageProvider implements StorageProvider {
     });
   }
 
+  async getUploadUrl(key: string, contentType: string, expiresInSec = 3600): Promise<string> {
+    return getSignedUrl(
+      this.client,
+      new PutObjectCommand({ Bucket: this.bucket, Key: key, ContentType: contentType }),
+      { expiresIn: expiresInSec }
+    );
+  }
+
   async exists(key: string): Promise<boolean> {
     try {
       await this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }));
