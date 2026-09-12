@@ -142,3 +142,14 @@ to the server — this isn't a policy choice layered on top, it's the whole
 design (only `{time, frequencyHz, confidence}` numbers ever leave the
 `AnalyserNode`). Don't add server involvement to this feature without
 re-reading README's "Microphone practice" section first.
+
+### Transpose only shifts the practice guide, not the audio
+
+The -3..+3 semitone control (`TransposeControl.tsx`) shifts the displayed
+target melody, key, vocal range, and mic comparison
+(`transposeMelodyNotes`/`transposePitchClass` in `music.ts`) — it does not
+re-pitch the backing track. That's a deliberate scope decision (see
+README's "Transpose / key shift"), not an oversight: real pitch-shifting
+that preserves tempo would need a new worker stage, a new cached-asset
+type, and a schema change (`ProcessingJob` is hard 1:1 with `Song` today).
+Don't assume audio re-pitching is a small follow-up to this feature.

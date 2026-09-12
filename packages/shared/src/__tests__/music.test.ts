@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { centsOffFromMidi, hzToMidi, midiToHz, midiToNoteName, noteNameToMidi } from "../music";
+import {
+  centsOffFromMidi,
+  hzToMidi,
+  midiToHz,
+  midiToNoteName,
+  noteNameToMidi,
+  transposeMelodyNotes,
+  transposePitchClass,
+} from "../music";
+import type { MelodyNoteDTO } from "../types";
 
 describe("hzToMidi", () => {
   it("maps A4 (440Hz) to MIDI 69", () => {
@@ -71,5 +80,54 @@ describe("centsOffFromMidi", () => {
     // one semitone sharp of A4 target (still target midi 69)
     expect(centsOffFromMidi(midiToHz(70), 69)).toBeCloseTo(100, 3);
     expect(centsOffFromMidi(midiToHz(68), 69)).toBeCloseTo(-100, 3);
+  });
+});
+
+describe("transposePitchClass", () => {
+  it("shifts naturals and wraps within the octave", () => {
+    expect(transposePitchClass("C", 1)).toBe("C#");
+    expect(transposePitchClass("C", -1)).toBe("B");
+    expect(transposePitchClass("B", 1)).toBe("C");
+  });
+
+  it("shifts sharps and flats correctly", () => {
+    expect(transposePitchClass("F#", 2)).toBe("G#");
+    expect(transposePitchClass("Bb", -2)).toBe("G#");
+  });
+
+  it("a zero shift is a no-op", () => {
+    expect(transposePitchClass("E", 0)).toBe("E");
+  });
+
+  it("throws on an invalid pitch class", () => {
+    expect(() => transposePitchClass("H", 1)).toThrow();
+    expect(() => transposePitchClass("C4", 1)).toThrow(); // octave-qualified names aren't a bare pitch class
+  });
+});
+
+describe("transposeMelodyNotes", () => {
+  const notes: MelodyNoteDTO[] = [
+    { id: "n1", start: 0, end: 1, midi: 69, noteName: "A4", confidence: 0.9, meanFrequencyHz: midiToHz(69) },
+    { id: "n2", start: 1, end: 2, midi: 72, noteName: "C5", confidence: 0.8, meanFrequencyHz: midiToHz(72) },
+  ];
+
+  it("shifts midi, noteName, and meanFrequencyHz together and consistently", () => {
+    const shifted = transposeMelodyNotes(notes, -2);
+    expect(shifted[0].midi).toBe(67);
+    expect(shifted[0].noteName).toBe("G4");
+    expect(shifted[0].meanFrequencyHz).toBeCloseTo(midiToHz(67), 6);
+    expect(shifted[1].midi).toBe(70);
+    expect(shifted[1].noteName).toBe("A#4");
+  });
+
+  it("leaves start/end/confidence untouched", () => {
+    const shifted = transposeMelodyNotes(notes, 3);
+    expect(shifted[0].start).toBe(notes[0].start);
+    expect(shifted[0].end).toBe(notes[0].end);
+    expect(shifted[0].confidence).toBe(notes[0].confidence);
+  });
+
+  it("returns the same array reference for a zero shift", () => {
+    expect(transposeMelodyNotes(notes, 0)).toBe(notes);
   });
 });

@@ -25,6 +25,7 @@ Paste YouTube URL → Analyze song → Create karaoke project → Practice song
 - [Worker configuration (CPU/GPU)](#worker-configuration-cpugpu)
 - [Object storage](#object-storage)
 - [Microphone practice](#microphone-practice)
+- [Transpose / key shift](#transpose--key-shift)
 - [Tests](#tests)
 - [Security considerations](#security-considerations)
 - [Known limitations](#known-limitations)
@@ -370,6 +371,28 @@ stops the media stream and discards that history.
   against — that's a property of the test fixture, not something specific
   to the mic feature.
 
+## Transpose / key shift
+
+Per command.txt's "SPECIAL FEATURE — KEY / TRANSPOSITION": a -3..+3
+semitone control (`apps/web/src/components/TransposeControl.tsx`) shifts
+the **practice guide** — the target melody in `PitchVisualizer`, the live
+microphone comparison, and the displayed key/vocal range
+(`packages/shared/src/music.ts`'s `transposeMelodyNotes`/
+`transposePitchClass`) — instantly and entirely client-side.
+
+**The backing audio itself is not re-pitched.** Doing that well (real
+pitch-shifting that preserves tempo, not just `playbackRate`, which changes
+both) is a substantially bigger feature: a new worker pipeline stage, a new
+cached-asset type per semitone, and — since `ProcessingJob` is currently
+hard one-to-one with a `Song` — a schema change to support it, all for a
+result the user would wait several seconds to hear each time they changed
+the shift amount. Scoped down deliberately (see command.txt's own
+conditional phrasing: "*if* transposed backing audio is implemented, use
+high-quality pitch shifting...") to the practice guide, which needs none of
+that and ships instantly: singing along with a recording in a different
+key than you'll perform it in, using the app purely as a visual/reference
+guide, is itself a real and common practice technique.
+
 ## Tests
 
 ```bash
@@ -381,9 +404,9 @@ npm run test:api          # audio probing, rate limiting, and a real SQLite-
                            # backed integration test of song creation +
                            # content-hash caching
 npm run test:e2e          # Playwright: paste link -> upload -> full real
-                           # pipeline -> play/highlight/loop/speed, against
-                           # the synthetic no-copyright fixture; plus a
-                           # microphone-practice test against a real
+                           # pipeline -> play/highlight/loop/speed/transpose,
+                           # against the synthetic no-copyright fixture;
+                           # plus a microphone-practice test against a real
                            # Chromium fake audio-capture device (see
                            # "Microphone practice" above)
 

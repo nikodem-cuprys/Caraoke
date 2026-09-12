@@ -1,3 +1,4 @@
+import { transposePitchClass } from "@singlearn/shared";
 import { expect, test } from "@playwright/test";
 import path from "node:path";
 
@@ -83,6 +84,21 @@ test("paste a YouTube link, upload authorized audio, process, and practice the r
     await page.locator('[data-testid="active-line"]').dblclick();
     await expect(page.getByText(/Looping line/)).toBeVisible();
     await page.getByRole("button", { name: "Stop looping" }).click();
+  });
+
+  await test.step("transpose the practice key", async () => {
+    const keyText = await page.getByText(/^Estimated key:/).textContent();
+    const match = /Estimated key:\s*([A-G][#b]?)\s+(major|minor)/.exec(keyText ?? "");
+    expect(match).toBeTruthy();
+    const [, tonic, mode] = match as RegExpExecArray;
+
+    await page.getByRole("button", { name: "+2", exact: true }).click();
+
+    const expectedTonic = transposePitchClass(tonic, 2);
+    await expect(page.getByText(`practicing in`)).toContainText(`${expectedTonic} ${mode}`);
+
+    // Reset so it doesn't leak into later steps in this serial test.
+    await page.getByRole("button", { name: "0", exact: true }).click();
   });
 
   await test.step("change playback speed", async () => {

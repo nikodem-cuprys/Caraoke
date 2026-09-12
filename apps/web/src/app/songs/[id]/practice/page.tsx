@@ -1,8 +1,8 @@
 "use client";
 
-import { findActiveSection } from "@singlearn/shared";
+import { findActiveSection, midiToNoteName, transposeMelodyNotes, transposePitchClass } from "@singlearn/shared";
 import type { SongDTO } from "@singlearn/shared";
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import { correctWord, getSong } from "@/lib/apiClient";
 import { usePlayer } from "@/lib/usePlayer";
 import { useMicrophonePitch } from "@/lib/useMicrophonePitch";
@@ -11,6 +11,7 @@ import { PitchVisualizer } from "@/components/PitchVisualizer";
 import { MicPracticePanel } from "@/components/MicPracticePanel";
 import { PracticeControls } from "@/components/PracticeControls";
 import { Mixer } from "@/components/Mixer";
+import { TransposeControl } from "@/components/TransposeControl";
 import { Waveform } from "@/components/Waveform";
 import { DifficultPartsPanel } from "@/components/DifficultPartsPanel";
 
@@ -72,6 +73,11 @@ function Player({
   const player = usePlayer(song);
   const mic = useMicrophonePitch(player.getCurrentTime);
   const activeSection = findActiveSection(song.sections, player.currentTime);
+  const [transposeSemitones, setTransposeSemitones] = useState(0);
+  const transposedNotes = useMemo(
+    () => transposeMelodyNotes(song.melodyNotes, transposeSemitones),
+    [song.melodyNotes, transposeSemitones]
+  );
 
   async function handleCorrectWord(wordId: string, text: string) {
     // Optimistic update: only the word's text changes, timing/sync is untouched.
@@ -127,7 +133,7 @@ function Player({
 
       <div className="card" style={{ marginBottom: 16 }}>
         <PitchVisualizer
-          notes={song.melodyNotes}
+          notes={transposedNotes}
           currentTime={player.currentTime}
           liveUserSamples={mic.permission === "granted" ? mic.samplesRef.current : undefined}
         />
@@ -140,7 +146,7 @@ function Player({
           stop={mic.stop}
           clearHistory={mic.clearHistory}
           samplesRef={mic.samplesRef}
-          melodyNotes={song.melodyNotes}
+          melodyNotes={transposedNotes}
           lines={song.lines}
         />
       </div>
@@ -212,15 +218,39 @@ function Player({
             <p style={{ fontSize: 13 }}>
               Vocal range: <strong>{song.vocalRange.lowestNote}</strong> – <strong>{song.vocalRange.highestNote}</strong> (
               {song.vocalRange.semitoneRange} semitones)
+              {transposeSemitones !== 0 && (
+                <>
+                  {" "}
+                  <span className="text-muted">
+                    → {midiToNoteName(song.vocalRange.lowestMidi + transposeSemitones)}–
+                    {midiToNoteName(song.vocalRange.highestMidi + transposeSemitones)} transposed
+                  </span>
+                </>
+              )}
             </p>
           )}
           {song.keyEstimate && (
             <p style={{ fontSize: 13 }}>
               Estimated key: <strong>{song.keyEstimate.tonic} {song.keyEstimate.mode}</strong>{" "}
               <span className="text-muted">({Math.round(song.keyEstimate.confidence * 100)}% confidence, estimate)</span>
+              {transposeSemitones !== 0 && (
+                <>
+                  {" "}
+                  <span className="text-muted">
+                    → practicing in{" "}
+                    <strong>
+                      {transposePitchClass(song.keyEstimate.tonic, transposeSemitones)} {song.keyEstimate.mode}
+                    </strong>
+                  </span>
+                </>
+              )}
             </p>
           )}
-          <h4 style={{ fontSize: 13, marginBottom: 8 }}>Difficult parts</h4>
+
+          <h4 style={{ fontSize: 13, marginBottom: 8 }}>Transpose</h4>
+          <TransposeControl value={transposeSemitones} onChange={setTransposeSemitones} />
+
+          <h4 style={{ fontSize: 13, marginTop: 16, marginBottom: 8 }}>Difficult parts</h4>
           <DifficultPartsPanel parts={song.difficultParts} onLoop={(part) => player.loopRegion({ start: part.start, end: part.end })} />
         </div>
       </div>
