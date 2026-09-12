@@ -112,13 +112,22 @@ test("practicing a difficult passage tracks clean passes up to mastery, then res
   // against it) enters the forced note's window at all.
   await page.getByRole("button", { name: "Play" }).click();
 
+  // "Check this attempt" judges whatever samples have accumulated at click
+  // time - it doesn't retry itself. A fixed sleep-then-click-once here was
+  // flaky in CI (a slower/headed xvfb runner needs more real time than a
+  // local dev machine to accumulate enough confident samples, especially at
+  // the exercise's 0.75x playback rate), so poll: keep clicking until a
+  // clean pass actually registers, rather than assuming one attempt is
+  // always enough.
+  async function checkUntilCleanPass(): Promise<void> {
+    await expect(async () => {
+      await page.getByRole("button", { name: "Check this attempt" }).click();
+      await expect(page.getByText("Clean pass! ✓")).toBeVisible({ timeout: 500 });
+    }).toPass({ timeout: 30_000, intervals: [1000] });
+  }
+
   for (let i = 1; i <= 3; i++) {
-    // Give the mic detection loop (50ms interval) time to accumulate
-    // several confident, in-tune samples while the loop replays the
-    // forced note's window.
-    await page.waitForTimeout(800);
-    await page.getByRole("button", { name: "Check this attempt" }).click();
-    await expect(page.getByText("Clean pass! ✓")).toBeVisible({ timeout: 5_000 });
+    await checkUntilCleanPass();
     await expect(page.getByText(`${i}/3 clean passes`)).toBeVisible();
   }
 
