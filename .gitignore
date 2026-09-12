@@ -6,7 +6,6 @@ build/
 __pycache__/
 .venv/
 venv/
-storage/
 storage_data/
 worker_tmp/
 *.db
