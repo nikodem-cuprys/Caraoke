@@ -5,32 +5,18 @@ const FIXTURE_WAV = path.resolve(__dirname, "..", "..", "apps", "worker", "fixtu
 
 test.describe.configure({ mode: "serial" });
 
-test("paste a YouTube link, upload authorized audio, process, and practice the resulting karaoke", async ({ page }) => {
-  // Instrument every real HTMLMediaElement.play() call (app code, not test
-  // code) so a later failure can show whether the app's own play() actually
-  // resolved or rejected -- calling play() again from the test itself, well
-  // after the original click's user-gesture window, would only ever show a
-  // fresh NotAllowedError and tell us nothing about the original call.
-  await page.addInitScript(() => {
-    (window as unknown as { __playLog: unknown[] }).__playLog = [];
-    const realPlay = HTMLMediaElement.prototype.play;
-    HTMLMediaElement.prototype.play = function (this: HTMLMediaElement) {
-      const src = this.currentSrc || this.src;
-      const result = realPlay.call(this);
-      result.then(
-        () => (window as unknown as { __playLog: unknown[] }).__playLog.push({ src, outcome: "resolved" }),
-        (e: Error) =>
-          (window as unknown as { __playLog: unknown[] }).__playLog.push({
-            src,
-            outcome: "rejected",
-            name: e.name,
-            message: e.message,
-          })
-      );
-      return result;
-    };
-  });
+// The player renders up to three <audio> elements at once (reference,
+// vocals, instrumental - see usePlayer.ts). Exactly which one is "primary"
+// depends on whether stem separation was available for this song, and the
+// inactive ones are rendered with no src, so `document.querySelector`
+// (which always returns the first element regardless of which is actually
+// driving playback) is not a safe way to read the canonical time from the
+// page - read the maximum currentTime across every audio element instead.
+function currentAudioTime(): number {
+  return Math.max(0, ...Array.from(document.querySelectorAll("audio")).map((a) => a.currentTime || 0));
+}
 
+test("paste a YouTube link, upload authorized audio, process, and practice the resulting karaoke", async ({ page }) => {
   await page.goto("/");
 
   await test.step("paste link and identify the song", async () => {
@@ -70,28 +56,7 @@ test("paste a YouTube link, upload authorized audio, process, and practice the r
       .poll(async () => page.locator('[data-testid="lyric-word"][data-active="true"]').count(), { timeout: 8000 })
       .toBeGreaterThan(0);
 
-    try {
-      await expect
-        .poll(async () => page.evaluate(() => document.querySelector("audio")?.currentTime ?? 0), { timeout: 8000 })
-        .toBeGreaterThan(0);
-    } catch (err) {
-      const diagnostics = await page.evaluate(() => {
-        const audios = Array.from(document.querySelectorAll("audio"));
-        const state = audios.map((a) => ({
-          src: a.src,
-          readyState: a.readyState,
-          networkState: a.networkState,
-          duration: a.duration,
-          paused: a.paused,
-          muted: a.muted,
-          volume: a.volume,
-          error: a.error ? { code: a.error.code, message: a.error.message } : null,
-        }));
-        return { state, playLog: (window as unknown as { __playLog: unknown[] }).__playLog };
-      });
-      console.log("AUDIO DIAGNOSTICS on failure:", JSON.stringify(diagnostics, null, 2));
-      throw err;
-    }
+    await expect.poll(async () => page.evaluate(currentAudioTime), { timeout: 8000 }).toBeGreaterThan(0);
 
     await page.getByRole("button", { name: "Pause" }).click();
   });
