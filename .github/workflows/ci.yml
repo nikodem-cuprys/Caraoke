@@ -230,15 +230,22 @@ jobs:
             quay.io/minio/minio:latest server /data --console-address ":9001"
 
       - name: Wait for MinIO and create the bucket
+        # dl.min.io's direct `mc` binary download now returns a 410 (MinIO
+        # Inc. discontinued free binary distribution alongside their Docker
+        # Hub images), so run the client from its quay.io container image
+        # instead. --network host lets it reach MinIO via localhost like
+        # the other steps; both mc commands run in one `docker run` since
+        # a fresh --rm container each time would lose the alias config the
+        # first command writes.
         run: |
-          curl -O https://dl.min.io/client/mc/release/linux-amd64/mc
-          chmod +x mc
           for _ in $(seq 1 30); do
             if curl -sf http://localhost:9000/minio/health/live >/dev/null; then break; fi
             sleep 1
           done
-          ./mc alias set local http://localhost:9000 singlearn singlearn-secret
-          ./mc mb -p local/singlearn
+          docker run --rm --network host --entrypoint /bin/sh quay.io/minio/mc:latest -c "
+            mc alias set local http://localhost:9000 singlearn singlearn-secret &&
+            mc mb -p local/singlearn
+          "
 
       - name: Install JS dependencies
         run: npm ci
