@@ -74,6 +74,27 @@ test("paste a YouTube link, upload authorized audio, process, and practice the r
       .not.toBe("0:00");
   });
 
+  await test.step("jump between sections", async () => {
+    const chips = page.locator('[data-testid="section-chip"]');
+    await expect(chips.first()).toBeVisible();
+    const chipCount = await chips.count();
+
+    // Whichever section covers t=0 (the fixture's single line) should be
+    // marked active right after seeking back to the start via the chip.
+    await chips.first().click();
+    await expect
+      .poll(async () => page.locator('[data-testid="current-time"]').first().textContent())
+      .toBe("0:00");
+    await expect(chips.first()).toHaveAttribute("data-active", "true");
+
+    if (chipCount > 1) {
+      await page.getByTestId("section-nav-next").click();
+      await expect
+        .poll(async () => page.locator('[data-testid="current-time"]').first().textContent())
+        .not.toBe("0:00");
+    }
+  });
+
   await test.step("loop the active lyric line", async () => {
     await page.locator('[data-testid="active-line"], [data-testid="lyric-word"]').first().scrollIntoViewIfNeeded();
     // Seek back to the start so there is an active line to loop.

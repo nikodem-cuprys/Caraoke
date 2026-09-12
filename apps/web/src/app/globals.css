@@ -1,17 +1,23 @@
+/* Greyscale + a single red accent family (deliberate brand palette: only
+   greys, blacks, and shades of red). Where the old teal/purple/amber
+   scheme relied on distinct hues to tell data series apart (target melody
+   vs. live mic pitch, section types), those are now told apart with
+   grey-vs-red or light-vs-dark instead - see PitchVisualizer.tsx and
+   Waveform.tsx's SECTION_COLORS. */
 :root {
-  --bg: #0b0d10;
-  --surface: #14171c;
-  --surface-2: #1c2027;
-  --border: #2a2f38;
-  --text: #e8eaed;
-  --text-muted: #9aa4b2;
-  --accent: #5ee6c8;
-  --accent-strong: #35c9a8;
-  --accent-contrast: #04211b;
-  --warn: #f0b429;
-  --danger: #ef5a6f;
-  --vocals: #5ee6c8;
-  --instrumental: #8b8fed;
+  --bg: #0a0a0b;
+  --surface: #151516;
+  --surface-2: #1f1f21;
+  --border: #303032;
+  --text: #ededee;
+  --text-muted: #9a9a9d;
+  --accent: #dc2626;
+  --accent-strong: #b91c1c;
+  --accent-contrast: #fff5f5;
+  --warn: #fca5a5;
+  --danger: #f87171;
+  --vocals: #dc2626;
+  --instrumental: #71717a;
 }
 
 * {
@@ -92,6 +98,12 @@ button {
 .input:focus {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
+}
+
+/* Range sliders (volume, loop pre-roll) default to the browser/OS accent
+   color (often blue) otherwise, which doesn't belong in this palette. */
+input[type="range"] {
+  accent-color: var(--accent);
 }
 
 .text-muted {

@@ -4,15 +4,18 @@ import {
   computeSectionLoopRegion,
   downsamplePitchPoints,
   findActiveLine,
+  findActiveSection,
   findActiveWord,
   findNextLine,
+  findNextSection,
   findPreviousLine,
+  findPreviousSection,
   isValidPlaybackSpeed,
   nextLoopSeekTime,
   rewindBySeconds,
   speedToPlaybackRate,
 } from "../timeline";
-import type { LyricLineDTO, LyricWordDTO, PitchPointDTO } from "../types";
+import type { LyricLineDTO, LyricWordDTO, PitchPointDTO, SongSectionDTO } from "../types";
 
 function makeWord(text: string, start: number, end: number): LyricWordDTO {
   return { id: `${text}-${start}`, text, start, end, confidence: 0.9, isUserCorrected: false, lowConfidence: false };
@@ -53,6 +56,38 @@ describe("findNextLine / findPreviousLine", () => {
   it("finds previous line", () => {
     expect(findPreviousLine(lines, 3.5)?.id).toBe("line-1");
     expect(findPreviousLine(lines, 0)).toBeNull();
+  });
+});
+
+function makeSection(id: string, type: SongSectionDTO["type"], start: number, end: number): SongSectionDTO {
+  return { id, type, label: type, start, end, confidence: 0.8, isEstimated: true };
+}
+
+const sections: SongSectionDTO[] = [
+  makeSection("s0", "intro", 0, 5),
+  makeSection("s1", "verse", 5, 15),
+  makeSection("s2", "chorus", 15, 25),
+];
+
+describe("findActiveSection / findNextSection / findPreviousSection", () => {
+  it("finds the section containing time t", () => {
+    expect(findActiveSection(sections, 2)?.id).toBe("s0");
+    expect(findActiveSection(sections, 20)?.id).toBe("s2");
+  });
+
+  it("returns null outside every section", () => {
+    expect(findActiveSection(sections, 30)).toBeNull();
+  });
+
+  it("finds the next section strictly after t", () => {
+    expect(findNextSection(sections, 2)?.id).toBe("s1");
+    expect(findNextSection(sections, 24)).toBeNull();
+  });
+
+  it("finds the previous section (most recent start <= t, same semantics as findPreviousLine - callers pass the active section's own start to skip past it)", () => {
+    expect(findPreviousSection(sections, 20)?.id).toBe("s2"); // t=20 is inside s2 itself
+    expect(findPreviousSection(sections, sections[2].start)?.id).toBe("s1"); // skip past the active section
+    expect(findPreviousSection(sections, 0)).toBeNull();
   });
 });
 

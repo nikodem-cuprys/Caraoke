@@ -3,15 +3,19 @@
 import type { SongSectionDTO, WaveformDTO } from "@singlearn/shared";
 import { useRef } from "react";
 
+// Grey/black/red palette: chorus (the hook, most memorable section) gets
+// the full red accent, pre-chorus a muted red (building toward it), verse
+// and bridge distinct grey shades, and the rest a neutral dark grey -
+// distinguishable without needing the old scheme's extra hues.
 const SECTION_COLORS: Record<string, string> = {
-  chorus: "#5ee6c8",
-  verse: "#8b8fed",
-  bridge: "#f0b429",
-  intro: "#4b5563",
-  outro: "#4b5563",
-  pre_chorus: "#c084fc",
-  instrumental: "#4b5563",
-  unknown: "#4b5563",
+  chorus: "#dc2626",
+  pre_chorus: "#8b4444",
+  verse: "#71717a",
+  bridge: "#a1a1aa",
+  intro: "#3f3f42",
+  outro: "#3f3f42",
+  instrumental: "#3f3f42",
+  unknown: "#3f3f42",
 };
 
 export function Waveform({
@@ -96,7 +100,7 @@ export function Waveform({
               title={s.label}
               style={{
                 width: `${((s.end - s.start) / durationSec) * 100}%`,
-                background: SECTION_COLORS[s.type] ?? "#4b5563",
+                background: SECTION_COLORS[s.type] ?? "#3f3f42",
               }}
             />
           ))}

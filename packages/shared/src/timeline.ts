@@ -51,6 +51,26 @@ export function findActiveSection(sections: SongSectionDTO[], t: number): SongSe
   return null;
 }
 
+/** Find the next section starting strictly after time t, if any. */
+export function findNextSection(sections: SongSectionDTO[], t: number): SongSectionDTO | null {
+  let best: SongSectionDTO | null = null;
+  for (const section of sections) {
+    if (section.start > t && (best === null || section.start < best.start)) best = section;
+  }
+  return best;
+}
+
+/** Find the previous section (the one whose start is <= t and is not the active/next section). */
+export function findPreviousSection(sections: SongSectionDTO[], t: number): SongSectionDTO | null {
+  const sorted = [...sections].sort((a, b) => a.start - b.start);
+  let prev: SongSectionDTO | null = null;
+  for (const section of sorted) {
+    if (section.start < t) prev = section;
+    else break;
+  }
+  return prev;
+}
+
 export interface LoopRegion {
   start: number;
   end: number;

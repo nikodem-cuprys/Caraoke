@@ -16,7 +16,10 @@ const STAGE_LABELS: Record<string, string> = {
 };
 
 function StageIcon({ status }: { status: ProcessingStage["status"] }) {
-  if (status === "done") return <span style={{ color: "var(--accent)" }}>✓</span>;
+  // var(--text), not var(--accent): the accent is the red brand/attention
+  // color, and a red checkmark for a successfully-completed stage would
+  // read as an error.
+  if (status === "done") return <span style={{ color: "var(--text)" }}>✓</span>;
   if (status === "failed") return <span style={{ color: "var(--danger)" }}>✕</span>;
   if (status === "running")
     return (

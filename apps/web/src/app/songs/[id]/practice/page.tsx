@@ -1,6 +1,6 @@
 "use client";
 
-import { findActiveSection, midiToNoteName, transposeMelodyNotes, transposePitchClass } from "@singlearn/shared";
+import { midiToNoteName, transposeMelodyNotes, transposePitchClass } from "@singlearn/shared";
 import type { SongDTO } from "@singlearn/shared";
 import { use, useEffect, useMemo, useState } from "react";
 import { correctWord, getSong } from "@/lib/apiClient";
@@ -11,6 +11,7 @@ import { PitchVisualizer } from "@/components/PitchVisualizer";
 import { MicPracticePanel } from "@/components/MicPracticePanel";
 import { PracticeControls } from "@/components/PracticeControls";
 import { Mixer } from "@/components/Mixer";
+import { SectionNav } from "@/components/SectionNav";
 import { TransposeControl } from "@/components/TransposeControl";
 import { Waveform } from "@/components/Waveform";
 import { DifficultPartsPanel } from "@/components/DifficultPartsPanel";
@@ -72,7 +73,6 @@ function Player({
 }) {
   const player = usePlayer(song);
   const mic = useMicrophonePitch(player.getCurrentTime);
-  const activeSection = findActiveSection(song.sections, player.currentTime);
   const [transposeSemitones, setTransposeSemitones] = useState(0);
   const transposedNotes = useMemo(
     () => transposeMelodyNotes(song.melodyNotes, transposeSemitones),
@@ -112,12 +112,23 @@ function Player({
           {song.artist && <div className="text-muted">{song.artist}</div>}
         </div>
         <div style={{ textAlign: "right" }}>
-          {activeSection && <div className="badge">{activeSection.label}</div>}
-          <button className="btn btn-secondary" style={{ marginTop: 8, fontSize: 12, padding: "6px 12px" }} onClick={onToggleEditMode}>
+          <button className="btn btn-secondary" style={{ fontSize: 12, padding: "6px 12px" }} onClick={onToggleEditMode}>
             {editMode ? "Done editing" : "Edit lyrics"}
           </button>
         </div>
       </header>
+
+      {song.sections.length > 0 && (
+        <div className="card" style={{ marginBottom: 16, padding: 12 }}>
+          <SectionNav
+            sections={song.sections}
+            activeSection={player.activeSection}
+            onJump={player.jumpToSection}
+            onPrevious={player.previousSection}
+            onNext={player.nextSection}
+          />
+        </div>
+      )}
 
       <div className="card" style={{ marginBottom: 16 }}>
         <LyricsView

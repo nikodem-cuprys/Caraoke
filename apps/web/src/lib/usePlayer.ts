@@ -5,8 +5,11 @@ import {
   computeLineLoopRegion,
   computeSectionLoopRegion,
   findActiveLine,
+  findActiveSection,
   findNextLine,
+  findNextSection,
   findPreviousLine,
+  findPreviousSection,
   nextLoopSeekTime,
   rewindBySeconds,
   speedToPlaybackRate,
@@ -147,6 +150,7 @@ export function usePlayer(song: SongDTO) {
   const setLoopPreroll = useCallback((prerollSec: number) => setLoop((l) => ({ ...l, prerollSec })), []);
 
   const activeLine = findActiveLine(song.lines, currentTime);
+  const activeSection = findActiveSection(song.sections, currentTime);
 
   const previousLine = useCallback(() => {
     const prev = findPreviousLine(song.lines, activeLine ? activeLine.start : currentTime);
@@ -157,6 +161,18 @@ export function usePlayer(song: SongDTO) {
     const next = findNextLine(song.lines, currentTime);
     if (next) seek(next.start);
   }, [currentTime, seek, song.lines]);
+
+  const previousSection = useCallback(() => {
+    const prev = findPreviousSection(song.sections, activeSection ? activeSection.start : currentTime);
+    if (prev) seek(prev.start);
+  }, [activeSection, currentTime, seek, song.sections]);
+
+  const nextSection = useCallback(() => {
+    const next = findNextSection(song.sections, currentTime);
+    if (next) seek(next.start);
+  }, [currentTime, seek, song.sections]);
+
+  const jumpToSection = useCallback((section: SongSectionDTO) => seek(section.start), [seek]);
 
   const rewind5 = useCallback(() => seek(rewindBySeconds(currentTime, 5)), [currentTime, seek]);
 
@@ -209,6 +225,7 @@ export function usePlayer(song: SongDTO) {
     instrumentalVolume,
     loop,
     activeLine,
+    activeSection,
     play,
     pause,
     seek,
@@ -222,6 +239,9 @@ export function usePlayer(song: SongDTO) {
     setLoopPreroll,
     previousLine,
     nextLine,
+    previousSection,
+    nextSection,
+    jumpToSection,
     rewind5,
     replayCurrentLine,
     setIsPlayingFromEvent: setIsPlaying,

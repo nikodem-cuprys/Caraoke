@@ -153,3 +153,20 @@ README's "Transpose / key shift"), not an oversight: real pitch-shifting
 that preserves tempo would need a new worker stage, a new cached-asset
 type, and a schema change (`ProcessingJob` is hard 1:1 with `Song` today).
 Don't assume audio re-pitching is a small follow-up to this feature.
+
+### UI palette is greys, blacks, and red — deliberately, not a placeholder
+
+`globals.css`'s `:root` variables are the source of truth; don't reach for
+teal/purple/amber/blue anywhere in the UI, including canvas-drawn colors
+that can't reference CSS variables directly (`PitchVisualizer.tsx`'s
+`CANVAS_*` constants, `Waveform.tsx`'s `SECTION_COLORS`) — mirror the CSS
+palette's hex values there instead. Where a design needs more than one
+distinguishable color for data (the pitch visualizer's target-vs-your-voice
+overlay, the waveform's section-type coloring), use grey-vs-red or
+light-vs-dark shades rather than introducing a new hue. One deliberate
+exception: `var(--accent)` is red now, not a "positive/success" color the
+way the old teal was — a few spots that used it for a success state
+(`ProcessingStages`'s "done" checkmark, the processing page's completion
+message) were switched to `var(--text)` instead, since a red checkmark
+reads as an error. Keep that distinction when adding new success states:
+red means "brand/primary action/attention," not "success."

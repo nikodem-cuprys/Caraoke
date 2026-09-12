@@ -73,7 +73,9 @@ export default function ProcessingPage({ params }: { params: Promise<{ id: strin
           </p>
         )}
         {effectiveJob?.status === "complete" && (
-          <p style={{ color: "var(--accent)", marginTop: 16 }}>Done! Taking you to the karaoke player…</p>
+          // var(--text), not var(--accent): the accent is the red brand/
+          // attention color, and this is a success message, not a warning.
+          <p style={{ color: "var(--text)", marginTop: 16 }}>Done! Taking you to the karaoke player…</p>
         )}
       </div>
     </main>

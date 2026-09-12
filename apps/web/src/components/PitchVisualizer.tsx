@@ -10,6 +10,21 @@ const FUTURE_WINDOW_SEC = 5.5;
 const PLAYHEAD_FRACTION = PAST_WINDOW_SEC / (PAST_WINDOW_SEC + FUTURE_WINDOW_SEC);
 const LIVE_PITCH_MIN_CONFIDENCE = 0.5;
 
+// Canvas 2D can't read CSS custom properties directly, so these mirror
+// globals.css's palette (grey/black/red only). The target melody (fixed,
+// reference) and the live mic path (real-time, "you") need to stay visually
+// distinguishable at a glance without relying on hue the way the old
+// teal-vs-red scheme did, so the target is rendered in white/grey and only
+// the live user path uses the red accent - the one place in this chart
+// where red specifically means "this is you, look here."
+const CANVAS_BG = "#0a0a0b";
+const CANVAS_MUTED_TEXT = "#9a9a9d";
+const CANVAS_GUIDE_LINE_OCTAVE = "#303032";
+const CANVAS_GUIDE_LINE_SEMITONE = "#1f1f21";
+const CANVAS_TARGET_NOTE = "237, 237, 238"; // rgb triplet for rgba() with variable opacity below
+const CANVAS_LIVE_USER_PITCH = "#ef4444";
+const CANVAS_PLAYHEAD = "#e5e5e6";
+
 export function PitchVisualizer({
   notes,
   currentTime,
@@ -39,7 +54,7 @@ export function PitchVisualizer({
     if (!ctx) return;
     ctx.scale(dpr, dpr);
 
-    ctx.fillStyle = "#0f1216";
+    ctx.fillStyle = CANVAS_BG;
     ctx.fillRect(0, 0, width, height);
 
     const windowStart = currentTime - PAST_WINDOW_SEC;
@@ -47,7 +62,7 @@ export function PitchVisualizer({
     const visible = notes.filter((n) => n.end >= windowStart && n.start <= windowEnd);
 
     if (notes.length === 0) {
-      ctx.fillStyle = "#6b7280";
+      ctx.fillStyle = CANVAS_MUTED_TEXT;
       ctx.font = "14px sans-serif";
       ctx.textAlign = "center";
       ctx.fillText("No confident melody detected for this section", width / 2, height / 2);
@@ -69,7 +84,7 @@ export function PitchVisualizer({
     // Horizontal guide lines per semitone (lighter on non-natural notes).
     for (let m = Math.ceil(minMidi); m <= Math.floor(maxMidi); m++) {
       const y = midiToY(m);
-      ctx.strokeStyle = m % 12 === 0 ? "#2a2f38" : "#1c2027";
+      ctx.strokeStyle = m % 12 === 0 ? CANVAS_GUIDE_LINE_OCTAVE : CANVAS_GUIDE_LINE_SEMITONE;
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(width, y);
@@ -81,7 +96,9 @@ export function PitchVisualizer({
       const x2 = Math.min(width, timeToX(note.end));
       const y = midiToY(note.midi);
       const isPast = note.end < currentTime;
-      ctx.fillStyle = isPast ? "rgba(94, 230, 200, 0.35)" : `rgba(94, 230, 200, ${0.5 + note.confidence * 0.5})`;
+      ctx.fillStyle = isPast
+        ? `rgba(${CANVAS_TARGET_NOTE}, 0.35)`
+        : `rgba(${CANVAS_TARGET_NOTE}, ${0.5 + note.confidence * 0.5})`;
       const barHeight = 10;
       const radius = 4;
       const w = Math.max(2, x2 - x1);
@@ -95,7 +112,7 @@ export function PitchVisualizer({
     // the detector wasn't confident are left as gaps, not interpolated
     // through, so silence never reads as "on pitch").
     if (visibleUserSamples.length > 0) {
-      ctx.strokeStyle = "#ef5a6f";
+      ctx.strokeStyle = CANVAS_LIVE_USER_PITCH;
       ctx.lineWidth = 2;
       ctx.beginPath();
       let drawing = false;
@@ -114,7 +131,7 @@ export function PitchVisualizer({
 
     // Playhead.
     const playheadX = width * PLAYHEAD_FRACTION;
-    ctx.strokeStyle = "#f0b429";
+    ctx.strokeStyle = CANVAS_PLAYHEAD;
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(playheadX, 0);
@@ -133,7 +150,7 @@ export function PitchVisualizer({
     <div ref={containerRef} style={{ width: "100%" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8, flexWrap: "wrap", gap: 8 }}>
         <span className="text-muted" style={{ fontSize: 13 }}>
-          Pitch guide{liveUserSamples ? " — target (teal) vs. your voice (red)" : ""}
+          Pitch guide{liveUserSamples ? " — target (grey) vs. your voice (red)" : ""}
         </span>
         <span style={{ fontSize: 15 }}>
           Target: <strong>{targetNote ? midiToNoteName(targetNote.midi) : "—"}</strong>

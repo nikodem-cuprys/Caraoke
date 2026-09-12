@@ -335,7 +335,7 @@ stops the media stream and discards that history.
   octave-doubled/halved frequency for a clean tone — a classic
   autocorrelation failure mode.
 - **Live comparison**: `PitchVisualizer` overlays the user's real-time path
-  (red) on the fixed target melody (teal) — see command.txt's own ASCII
+  (red) on the fixed target melody (grey/white) — see command.txt's own ASCII
   sketch of "target = fixed path, user = real-time path" — plus a live
   "You: +N cents" / "-N cents" readout (`centsOffFromMidi`) while a
   confident target note is active, and an always-visible "Listening —
@@ -404,10 +404,10 @@ npm run test:api          # audio probing, rate limiting, and a real SQLite-
                            # backed integration test of song creation +
                            # content-hash caching
 npm run test:e2e          # Playwright: paste link -> upload -> full real
-                           # pipeline -> play/highlight/loop/speed/transpose,
-                           # against the synthetic no-copyright fixture;
-                           # plus a microphone-practice test against a real
-                           # Chromium fake audio-capture device (see
+                           # pipeline -> play/highlight/loop/speed/transpose/
+                           # section-jump, against the synthetic no-copyright
+                           # fixture; plus a microphone-practice test against
+                           # a real Chromium fake audio-capture device (see
                            # "Microphone practice" above)
 
 cd apps/worker
