@@ -1,6 +1,6 @@
 "use client";
 
-import { isValidYoutubeUrl } from "@singlearn/shared";
+import { formatRelativeTime, isValidYoutubeUrl } from "@singlearn/shared";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -167,6 +167,14 @@ export default function HomePage() {
                 <div className="badge" style={{ marginTop: 8 }}>
                   {song.status === "complete" ? "Ready to practice" : song.status === "failed" ? "Failed" : "Processing…"}
                 </div>
+                {song.practiceSummary.sessionCount > 0 && (
+                  <div className="text-muted" style={{ fontSize: 12, marginTop: 6 }}>
+                    Practiced {song.practiceSummary.sessionCount}x
+                    {song.practiceSummary.lastPracticedAt && (
+                      <> · last {formatRelativeTime(song.practiceSummary.lastPracticedAt)}</>
+                    )}
+                  </div>
+                )}
               </a>
             ))}
           </div>

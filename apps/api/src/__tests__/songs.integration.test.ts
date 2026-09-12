@@ -231,6 +231,50 @@ describe("song creation and processing pipeline", () => {
     expect(secondSong.body.lines[0].words[0].text).toBe("hello");
   });
 
+  it("tracks practice sessions and summarizes them on the song and in the library list", async () => {
+    const clientId = uniqueClientId();
+    const { songId } = await createSongAndUpload(clientId);
+
+    const started = await request(app).post(`/api/songs/${songId}/practice-sessions`).set("X-Client-Id", clientId);
+    expect(started.status).toBe(201);
+    const sessionId = started.body.id as string;
+
+    const beforeEnd = await request(app).get(`/api/songs/${songId}`).set("X-Client-Id", clientId);
+    expect(beforeEnd.body.practiceSummary.sessionCount).toBe(1);
+    expect(beforeEnd.body.practiceSummary.lastPracticedAt).toBeTruthy();
+    // Not ended yet, so it doesn't count toward total practice time.
+    expect(beforeEnd.body.practiceSummary.totalPracticeSec).toBe(0);
+
+    const ended = await request(app)
+      .patch(`/api/songs/${songId}/practice-sessions/${sessionId}`)
+      .set("X-Client-Id", clientId);
+    expect(ended.status).toBe(200);
+
+    const afterEnd = await request(app).get(`/api/songs/${songId}`).set("X-Client-Id", clientId);
+    expect(afterEnd.body.practiceSummary.sessionCount).toBe(1);
+    expect(afterEnd.body.practiceSummary.totalPracticeSec).toBeGreaterThanOrEqual(0);
+
+    const library = await request(app).get("/api/songs").set("X-Client-Id", clientId);
+    const listedSong = library.body.find((s: { id: string }) => s.id === songId);
+    expect(listedSong.practiceSummary.sessionCount).toBe(1);
+  });
+
+  it("rejects starting or ending a practice session for someone else's song", async () => {
+    const { songId } = await createSongAndUpload("practice-session-owner");
+    const startAsOther = await request(app)
+      .post(`/api/songs/${songId}/practice-sessions`)
+      .set("X-Client-Id", "someone-else");
+    expect(startAsOther.status).toBe(403);
+
+    const started = await request(app)
+      .post(`/api/songs/${songId}/practice-sessions`)
+      .set("X-Client-Id", "practice-session-owner");
+    const endAsOther = await request(app)
+      .patch(`/api/songs/${songId}/practice-sessions/${started.body.id}`)
+      .set("X-Client-Id", "someone-else");
+    expect(endAsOther.status).toBe(403);
+  });
+
   it("the worker upload-url endpoint scopes keys to the job's own song and rejects mismatched ones", async () => {
     const clientId = uniqueClientId();
     const { songId, uploadRes } = await createSongAndUpload(clientId);

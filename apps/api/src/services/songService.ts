@@ -5,6 +5,7 @@ import {
   downsamplePitchPoints,
   type AudioAssetsDTO,
   type PitchPointDTO,
+  type PracticeSummaryDTO,
   type SongDTO,
 } from "@singlearn/shared";
 import { fetchYoutubeMetadata } from "../youtube/fetchYoutubeMetadata";
@@ -187,6 +188,37 @@ async function cloneProcessedResults(fromSongId: string, toSongId: string): Prom
   }
 }
 
+// A session left open by an abandoned/crashed tab should never inflate
+// "total practice time" without bound - each session's contribution is
+// capped at a generous but finite ceiling.
+const MAX_SESSION_DURATION_SEC = 3 * 60 * 60;
+
+/** Summarizes a client's PracticeSession rows for one song into the DTO shape - shared by assembleSongDTO (one query, this song only) and listSongsForClient's route handler (already-fetched via a filtered include, no extra query per song). */
+export function summarizePracticeSessions(sessions: { startedAt: Date; endedAt: Date | null }[]): PracticeSummaryDTO {
+  const totalPracticeSec = sessions.reduce((sum, s) => {
+    if (!s.endedAt) return sum;
+    const durationSec = (s.endedAt.getTime() - s.startedAt.getTime()) / 1000;
+    return sum + Math.max(0, Math.min(durationSec, MAX_SESSION_DURATION_SEC));
+  }, 0);
+  const lastPracticedAt = sessions.reduce<Date | null>(
+    (latest, s) => (!latest || s.startedAt > latest ? s.startedAt : latest),
+    null
+  );
+  return {
+    sessionCount: sessions.length,
+    totalPracticeSec: Math.round(totalPracticeSec),
+    lastPracticedAt: lastPracticedAt ? lastPracticedAt.toISOString() : null,
+  };
+}
+
+async function computePracticeSummary(songId: string, clientId: string | null): Promise<PracticeSummaryDTO> {
+  if (!clientId) {
+    return { sessionCount: 0, totalPracticeSec: 0, lastPracticedAt: null };
+  }
+  const sessions = await prisma.practiceSession.findMany({ where: { songId, clientId } });
+  return summarizePracticeSessions(sessions);
+}
+
 export async function assembleSongDTO(songId: string, clientOwnerId: string | null): Promise<SongDTO> {
   const song = await prisma.song.findUniqueOrThrow({
     where: { id: songId },
@@ -243,6 +275,7 @@ export async function assembleSongDTO(songId: string, clientOwnerId: string | nu
   }
 
   const job = song.job ? await toJobDTO(song.job.id) : null;
+  const practiceSummary = await computePracticeSummary(songId, clientOwnerId);
 
   return {
     id: song.id,
@@ -307,6 +340,7 @@ export async function assembleSongDTO(songId: string, clientOwnerId: string | nu
     keyEstimate: song.keyEstimateJson ? JSON.parse(song.keyEstimateJson) : null,
     waveform,
     assets,
+    practiceSummary,
     processingJob: job ?? {
       id: "",
       songId: song.id,
@@ -323,6 +357,6 @@ export async function listSongsForClient(clientOwnerId: string) {
   return prisma.song.findMany({
     where: { clientOwnerId },
     orderBy: { createdAt: "desc" },
-    include: { job: true, source: true },
+    include: { job: true, source: true, practiceSessions: { where: { clientId: clientOwnerId } } },
   });
 }

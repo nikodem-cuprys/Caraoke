@@ -1,4 +1,4 @@
-import type { SongDTO } from "@singlearn/shared";
+import type { PracticeSummaryDTO, SongDTO } from "@singlearn/shared";
 import { getClientId } from "./clientId";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4100";
@@ -57,6 +57,7 @@ export interface LibrarySongSummary {
   durationSec: number;
   status: string;
   createdAt: string;
+  practiceSummary: PracticeSummaryDTO;
 }
 
 export function listSongs(): Promise<LibrarySongSummary[]> {
@@ -77,6 +78,15 @@ export function editSection(
   patch: Partial<{ type: string; label: string; start: number; end: number }>
 ): Promise<void> {
   return request(`/api/songs/${songId}/sections/${sectionId}`, { method: "PATCH", body: JSON.stringify(patch) });
+}
+
+export function startPracticeSession(songId: string): Promise<{ id: string }> {
+  return request(`/api/songs/${songId}/practice-sessions`, { method: "POST" });
+}
+
+/** Heartbeat/end: extends the session's endedAt to now. See usePracticeSession.ts for why this is called repeatedly rather than once at the end. */
+export function pingPracticeSession(songId: string, sessionId: string): Promise<void> {
+  return request(`/api/songs/${songId}/practice-sessions/${sessionId}`, { method: "PATCH" });
 }
 
 export function jobStreamUrl(jobId: string): string {

@@ -1,11 +1,19 @@
 "use client";
 
-import { midiToNoteName, transposeMelodyNotes, transposePitchClass } from "@singlearn/shared";
-import type { SongDTO } from "@singlearn/shared";
+import {
+  estimateSongDifficulty,
+  formatDurationShort,
+  formatRelativeTime,
+  midiToNoteName,
+  transposeMelodyNotes,
+  transposePitchClass,
+} from "@singlearn/shared";
+import type { DifficultyLevel, SongDTO } from "@singlearn/shared";
 import { use, useEffect, useMemo, useState } from "react";
 import { correctWord, getSong } from "@/lib/apiClient";
 import { usePlayer } from "@/lib/usePlayer";
 import { useMicrophonePitch } from "@/lib/useMicrophonePitch";
+import { usePracticeSession } from "@/lib/usePracticeSession";
 import { LyricsView } from "@/components/LyricsView";
 import { PitchVisualizer } from "@/components/PitchVisualizer";
 import { MicPracticePanel } from "@/components/MicPracticePanel";
@@ -15,6 +23,13 @@ import { SectionNav } from "@/components/SectionNav";
 import { TransposeControl } from "@/components/TransposeControl";
 import { Waveform } from "@/components/Waveform";
 import { DifficultPartsPanel } from "@/components/DifficultPartsPanel";
+
+const DIFFICULTY_LABELS: Record<DifficultyLevel, string> = {
+  easy: "Easy",
+  moderate: "Moderate",
+  challenging: "Challenging",
+  difficult: "Difficult",
+};
 
 export default function PracticePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -73,10 +88,21 @@ function Player({
 }) {
   const player = usePlayer(song);
   const mic = useMicrophonePitch(player.getCurrentTime);
+  usePracticeSession(song.id);
   const [transposeSemitones, setTransposeSemitones] = useState(0);
   const transposedNotes = useMemo(
     () => transposeMelodyNotes(song.melodyNotes, transposeSemitones),
     [song.melodyNotes, transposeSemitones]
+  );
+  const difficulty = useMemo(
+    () =>
+      estimateSongDifficulty({
+        vocalRange: song.vocalRange,
+        difficultParts: song.difficultParts,
+        lines: song.lines,
+        durationSec: song.durationSec,
+      }),
+    [song.vocalRange, song.difficultParts, song.lines, song.durationSec]
   );
 
   async function handleCorrectWord(wordId: string, text: string) {
@@ -257,6 +283,36 @@ function Player({
               )}
             </p>
           )}
+
+          {difficulty ? (
+            <p style={{ fontSize: 13 }}>
+              Difficulty: <strong>{DIFFICULTY_LABELS[difficulty.level]}</strong>{" "}
+              <span className="text-muted">(estimate)</span>
+              <br />
+              <span className="text-muted" style={{ fontSize: 12 }}>{difficulty.factors.join(" · ")}</span>
+            </p>
+          ) : (
+            <p className="text-muted" style={{ fontSize: 13 }}>
+              Not enough confident melody data to estimate difficulty yet.
+            </p>
+          )}
+
+          <p style={{ fontSize: 13 }}>
+            {song.practiceSummary.sessionCount === 0 ? (
+              "Not practiced yet"
+            ) : (
+              <>
+                Practiced <strong>{song.practiceSummary.sessionCount}</strong> time
+                {song.practiceSummary.sessionCount === 1 ? "" : "s"}
+                {song.practiceSummary.totalPracticeSec > 0 && (
+                  <> · {formatDurationShort(song.practiceSummary.totalPracticeSec)} total</>
+                )}
+                {song.practiceSummary.lastPracticedAt && (
+                  <span className="text-muted"> · last practiced {formatRelativeTime(song.practiceSummary.lastPracticedAt)}</span>
+                )}
+              </>
+            )}
+          </p>
 
           <h4 style={{ fontSize: 13, marginBottom: 8 }}>Transpose</h4>
           <TransposeControl value={transposeSemitones} onChange={setTransposeSemitones} />

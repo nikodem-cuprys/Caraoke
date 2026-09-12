@@ -166,6 +166,15 @@ export interface WaveformDTO {
   durationSec: number;
 }
 
+/** Practice history for one client's practice of one song (command.txt FUTURE FEATURES: "practice history"). Scoped per-client, never shared across users. */
+export interface PracticeSummaryDTO {
+  sessionCount: number;
+  /** Sum of completed sessions' durations, seconds. In-progress sessions (no endedAt yet) aren't counted until their next heartbeat/end. */
+  totalPracticeSec: number;
+  /** ISO timestamp of the most recent session's start, or null if never practiced. */
+  lastPracticedAt: string | null;
+}
+
 export interface AudioAssetsDTO {
   reference: string | null; // signed URL to prepared reference mix
   vocals: string | null; // signed URL to isolated vocal stem, if separation ran
@@ -193,6 +202,7 @@ export interface SongDTO {
   waveform: WaveformDTO | null;
   assets: AudioAssetsDTO;
   processingJob: ProcessingJobDTO;
+  practiceSummary: PracticeSummaryDTO;
   createdAt: string;
 }
 

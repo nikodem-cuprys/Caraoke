@@ -130,4 +130,28 @@ test("paste a YouTube link, upload authorized audio, process, and practice the r
     });
     expect(rate).toBe(0.75);
   });
+
+  await test.step("difficulty estimate and practice history", async () => {
+    // This fixture's TTS-spoken "singing" doesn't reliably produce a
+    // confident vocal range (see microphonePractice.spec.ts's comment on
+    // the same limitation), so the honest "not enough data" fallback is
+    // what should actually appear here, not a fabricated rating.
+    await expect(page.getByText("Not enough confident melody data to estimate difficulty yet.")).toBeVisible();
+
+    // usePracticeSession starts a session in the background as soon as the
+    // practice page mounts; the song data used to render "Not practiced
+    // yet" below was fetched before that resolved, so this is the correct
+    // first-load state, not a bug.
+    await expect(page.getByText("Not practiced yet")).toBeVisible();
+
+    // Reloading re-fetches the song after the earlier session-start call
+    // has long since resolved, so it should now be reflected. Not
+    // asserting an exact count of 1: Next's dev server runs React
+    // StrictMode, which deliberately mounts every component twice
+    // (mount/unmount/remount) to surface effect bugs, so a real practice
+    // session and one honestly-short-lived StrictMode artifact session
+    // are both expected on a single dev-mode page load.
+    await page.reload();
+    await expect(page.getByText(/^Practiced \d+ times?/)).toBeVisible({ timeout: 10_000 });
+  });
 });

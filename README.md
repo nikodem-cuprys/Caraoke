@@ -26,6 +26,7 @@ Paste YouTube URL → Analyze song → Create karaoke project → Practice song
 - [Object storage](#object-storage)
 - [Microphone practice](#microphone-practice)
 - [Transpose / key shift](#transpose--key-shift)
+- [Difficulty rating & practice history](#difficulty-rating--practice-history)
 - [Tests](#tests)
 - [Security considerations](#security-considerations)
 - [Known limitations](#known-limitations)
@@ -393,6 +394,38 @@ that and ships instantly: singing along with a recording in a different
 key than you'll perform it in, using the app purely as a visual/reference
 guide, is itself a real and common practice technique.
 
+## Difficulty rating & practice history
+
+Two command.txt FUTURE FEATURES items, both implemented from data/schema
+that already existed rather than needing new analysis or migrations:
+
+- **Difficulty rating** (`packages/shared/src/difficulty.ts`): an overall
+  Easy/Moderate/Challenging/Difficult estimate computed client-side from
+  data the pipeline already produces — vocal range (40% weight), difficult
+  passages' severity (35%), and lyric density in words/sec (25%) — shown
+  with its contributing factors as plain sentences, never a bare score, the
+  same "explain the estimate" principle as the singing feedback and
+  per-passage difficult parts. Requires a confident vocal range and returns
+  `null` rather than guessing when one isn't available (this repo's TTS
+  test fixture is exactly such a case — see its own honest "not enough
+  data" UI state, covered in `karaoke.spec.ts`).
+- **Practice history**: the `PracticeSession` Prisma model already existed
+  in the schema (part of the original DATABASE MODEL scaffolding) but had
+  no working endpoints or UI. `usePracticeSession.ts` starts a session when
+  the practice page mounts and heartbeat-extends it (`PATCH
+  /api/songs/:id/practice-sessions/:sessionId`) every 30s while it stays
+  open, rather than relying on a single "end" call a closed tab would never
+  get to send — the worst case of a missed final heartbeat is a session
+  under-counted by one interval, not one left open indefinitely.
+  `SongDTO.practiceSummary` and the library list both surface session
+  count/total time/last-practiced, scoped per client (never shared across
+  users). **In `next dev` specifically**, expect session counts to run
+  slightly ahead of the number of times you actually opened the page:
+  Next's dev server runs React StrictMode, which deliberately mounts every
+  component twice to surface effect bugs, so each dev-mode page load
+  creates one real session plus one honestly-short (near-zero-duration)
+  StrictMode artifact session — this doesn't happen in production builds.
+
 ## Tests
 
 ```bash
@@ -405,7 +438,8 @@ npm run test:api          # audio probing, rate limiting, and a real SQLite-
                            # content-hash caching
 npm run test:e2e          # Playwright: paste link -> upload -> full real
                            # pipeline -> play/highlight/loop/speed/transpose/
-                           # section-jump, against the synthetic no-copyright
+                           # section-jump/difficulty-estimate/practice-
+                           # history, against the synthetic no-copyright
                            # fixture; plus a microphone-practice test against
                            # a real Chromium fake audio-capture device (see
                            # "Microphone practice" above)

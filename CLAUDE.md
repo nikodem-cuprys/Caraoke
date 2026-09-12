@@ -170,3 +170,23 @@ way the old teal was — a few spots that used it for a success state
 message) were switched to `var(--text)` instead, since a red checkmark
 reads as an error. Keep that distinction when adding new success states:
 red means "brand/primary action/attention," not "success."
+
+### Practice sessions heartbeat; they don't rely on a single "end" call
+
+`usePracticeSession.ts` extends a `PracticeSession` row every 30s while the
+practice page stays mounted (`PATCH .../practice-sessions/:id`), rather
+than starting one on mount and ending it once on unmount — a closed tab or
+crashed browser would never get to send that final call, leaving the
+session open forever. If you touch this hook, keep the "cleanup can fire
+before the async start resolves" case handled explicitly (end the session
+immediately in that case rather than starting a heartbeat interval nothing
+will ever clear) - this was a real bug caught by comparing e2e output
+against expectations, not by inspection. Also: in `next dev`, expect one
+extra near-zero-duration session per page load from React StrictMode's
+deliberate double-mount - don't "fix" that by suppressing StrictMode.
+
+`PracticeSession` (and its Prisma model) predates this feature by a lot -
+it was part of the original schema scaffolding with no working
+endpoints/UI behind it, the same situation `LicensedAudioProvider` is
+still in. Grep for a model/interface actually being used before assuming a
+feature is unimplemented just because it doesn't show up in the UI yet.
