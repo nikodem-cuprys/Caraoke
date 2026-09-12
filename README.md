@@ -28,6 +28,7 @@ Paste YouTube URL → Analyze song → Create karaoke project → Practice song
 - [Transpose / key shift](#transpose--key-shift)
 - [Difficulty rating & practice history](#difficulty-rating--practice-history)
 - [Vocal range fit check](#vocal-range-fit-check)
+- [Vocal exercises for difficult passages](#vocal-exercises-for-difficult-passages)
 - [Tests](#tests)
 - [Security considerations](#security-considerations)
 - [Known limitations](#known-limitations)
@@ -472,6 +473,43 @@ song fetch to inject a fixed, known range instead, exercising the fit-check
 and calibration UI for real (real mic pipeline, real browser rendering)
 without depending on the fixture producing a specific melody.
 
+## Vocal exercises for difficult passages
+
+Per command.txt FUTURE FEATURES's "vocal exercises based on difficult
+notes": turns the existing DIFFICULT PARTS list (large jumps, highest/
+lowest notes, long sustains, rapid changes - already surfaced with a
+one-click "Loop" per command.txt's own spec) into an actual practice loop
+instead of just a listening aid.
+
+Clicking **"Practice this"** on a flagged passage (`DifficultPartsPanel.tsx`):
+
+- Loops that passage (reusing the existing loop-region mechanism) and
+  automatically drops playback to 0.75x, restoring whatever speed was
+  active before once you click "Done practicing".
+- Enables the same microphone pipeline used by regular mic practice
+  (`useMicrophonePitch`, in the `Player` component) rather than a second
+  one, so pitch samples are timestamped against the same canonical
+  playback clock the loop is using.
+- On **"Check this attempt"**, judges the accumulated samples against the
+  passage's target notes (`evaluateExerciseAttempt` in
+  `packages/shared/src/exercisePractice.ts`) using a simple, generous
+  in-tune-and-covered threshold - deliberately a plain pass/fail signal,
+  not a full explanation (that's what the existing singing-feedback panel
+  is for). A clean attempt increments a cumulative "clean pass" counter
+  persisted per song/passage in `localStorage`
+  (`apps/web/src/lib/exerciseProgress.ts`, same no-account-system rationale
+  as the vocal range calibration above); reaching 3 marks the passage
+  **Mastered** with a small badge that persists even after you stop
+  practicing. A rough attempt doesn't reset the counter - the goal is
+  "have you nailed this enough times," not punishing one bad take after
+  good ones.
+
+Like the difficulty rating and vocal range features, the synthetic e2e
+fixture doesn't reliably produce a confident melody, so `difficultParts`
+is normally empty for it; `tests/e2e/vocalExercise.spec.ts` forces one
+difficult passage and a matching target note via route interception (same
+technique as `vocalRangeFit.spec.ts`) to exercise the full flow for real.
+
 ## Tests
 
 ```bash
@@ -486,10 +524,12 @@ npm run test:e2e          # Playwright: paste link -> upload -> full real
                            # pipeline -> play/highlight/loop/speed/transpose/
                            # section-jump/difficulty-estimate/practice-
                            # history, against the synthetic no-copyright
-                           # fixture; plus microphone-practice and vocal-
-                           # range-calibration tests against a real Chromium
-                           # fake audio-capture device (see "Microphone
-                           # practice" and "Vocal range fit check" above)
+                           # fixture; plus microphone-practice, vocal-range-
+                           # calibration, and difficult-passage-exercise
+                           # tests against a real Chromium fake audio-capture
+                           # device (see "Microphone practice", "Vocal range
+                           # fit check", and "Vocal exercises for difficult
+                           # passages" above)
 
 cd apps/worker
 pytest                    # unit tests per pipeline stage, plus real

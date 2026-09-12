@@ -316,7 +316,20 @@ function Player({
           <TransposeControl value={transposeSemitones} onChange={setTransposeSemitones} />
 
           <h4 style={{ fontSize: 13, marginTop: 16, marginBottom: 8 }}>Difficult parts</h4>
-          <DifficultPartsPanel parts={song.difficultParts} onLoop={(part) => player.loopRegion({ start: part.start, end: part.end })} />
+          <DifficultPartsPanel
+            songId={song.id}
+            parts={song.difficultParts}
+            melodyNotes={transposedNotes}
+            micPermission={mic.permission}
+            micError={mic.error}
+            micSamplesRef={mic.samplesRef}
+            micStart={mic.start}
+            micClearHistory={mic.clearHistory}
+            playbackRate={player.playbackRate}
+            onSetPlaybackRate={player.setPlaybackRate}
+            onLoop={(part) => player.loopRegion({ start: part.start, end: part.end })}
+            onClearLoop={player.clearLoop}
+          />
         </div>
       </div>
     </main>

@@ -203,3 +203,23 @@ the repo's synthetic e2e fixture without forcing `song.vocalRange` via route
 interception first (see `tests/e2e/vocalRangeFit.spec.ts`) - like the
 difficulty rating feature, the fixture's TTS "singing" doesn't reliably
 produce a confident melody, so the real field is null for it.
+
+### Vocal exercises reuse the main mic instance, not a second one
+
+Unlike `VocalRangeCard`, `DifficultPartsPanel`'s "Practice this" exercise
+flow takes the `Player` component's existing `useMicrophonePitch` instance
+as props (`micPermission`/`micStart`/`micSamplesRef`/`micClearHistory`)
+rather than creating its own - it needs samples timestamped against the
+same canonical playback clock the loop region is using, so calling
+`micStart()` from the exercise flow just enables the same "Microphone
+practice active" state the regular mic panel shows. `evaluateExerciseAttempt`
+(`packages/shared/src/exercisePractice.ts`) is a deliberately separate,
+simpler pass/fail judgment from `singingScore.ts`'s feedback sentences -
+don't merge them; the exercise flow wants one boolean per attempt, not a
+paragraph. Progress (`apps/web/src/lib/exerciseProgress.ts`) is
+`localStorage`-only, same rationale as the vocal range calibration above.
+Starting an exercise does not call `player.play()` - like the pre-existing
+"Loop" button, it only sets up the loop region; e2e tests for this feature
+must click Play themselves (a real bug this session hit: without it,
+`currentTime` never leaves 0, so mic samples never fall inside the target
+note's window and every attempt reports "not enough signal").

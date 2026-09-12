@@ -8,3 +8,4 @@ export * from "./formatting";
 export * from "./vocalRangeFit";
 export * from "./pitchDetection";
 export * from "./singingScore";
+export * from "./exercisePractice";
