@@ -6,6 +6,31 @@ const FIXTURE_WAV = path.resolve(__dirname, "..", "..", "apps", "worker", "fixtu
 test.describe.configure({ mode: "serial" });
 
 test("paste a YouTube link, upload authorized audio, process, and practice the resulting karaoke", async ({ page }) => {
+  // Instrument every real HTMLMediaElement.play() call (app code, not test
+  // code) so a later failure can show whether the app's own play() actually
+  // resolved or rejected -- calling play() again from the test itself, well
+  // after the original click's user-gesture window, would only ever show a
+  // fresh NotAllowedError and tell us nothing about the original call.
+  await page.addInitScript(() => {
+    (window as unknown as { __playLog: unknown[] }).__playLog = [];
+    const realPlay = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = function (this: HTMLMediaElement) {
+      const src = this.currentSrc || this.src;
+      const result = realPlay.call(this);
+      result.then(
+        () => (window as unknown as { __playLog: unknown[] }).__playLog.push({ src, outcome: "resolved" }),
+        (e: Error) =>
+          (window as unknown as { __playLog: unknown[] }).__playLog.push({
+            src,
+            outcome: "rejected",
+            name: e.name,
+            message: e.message,
+          })
+      );
+      return result;
+    };
+  });
+
   await page.goto("/");
 
   await test.step("paste link and identify the song", async () => {
@@ -52,7 +77,7 @@ test("paste a YouTube link, upload authorized audio, process, and practice the r
     } catch (err) {
       const diagnostics = await page.evaluate(() => {
         const audios = Array.from(document.querySelectorAll("audio"));
-        return audios.map((a) => ({
+        const state = audios.map((a) => ({
           src: a.src,
           readyState: a.readyState,
           networkState: a.networkState,
@@ -62,6 +87,7 @@ test("paste a YouTube link, upload authorized audio, process, and practice the r
           volume: a.volume,
           error: a.error ? { code: a.error.code, message: a.error.message } : null,
         }));
+        return { state, playLog: (window as unknown as { __playLog: unknown[] }).__playLog };
       });
       console.log("AUDIO DIAGNOSTICS on failure:", JSON.stringify(diagnostics, null, 2));
       throw err;
