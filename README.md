@@ -371,10 +371,22 @@ file from local TTS + a synthesized chord.
   works today.
 - Live microphone pitch comparison and singing-score feedback are designed
   for (see the `PitchFrame`/confidence data model) but not yet implemented.
-- `BullMqQueueProvider` is not exercised by the automated test suite, which
-  runs without Redis; it's a straightforward swap (same `QueueProvider`
-  interface as the default) but should get a manual smoke test before
-  relying on it in production.
+- `BullMqQueueProvider` is exercised by a dedicated CI job against a real
+  Redis service container (`.github/workflows/ci.yml`'s `bullmq-smoke-test`
+  job) — switching `QUEUE_PROVIDER=bullmq` is safe to rely on.
+- **`STORAGE_PROVIDER=s3` is implemented on the API side only (uploads,
+  presigned GET URLs) — the worker does not support it yet.** The API hands
+  the worker a `sourceAudioSignedUrl` when storage is S3-backed, but
+  `run_pipeline.py` never downloads it (it only reads
+  `sourceAudioLocalPath`, which is `null` in S3 mode) and there is no
+  presigned-*PUT* mechanism for the worker to upload the assets it produces
+  (stems, prepared audio, pitch/waveform JSON) back to S3 — `register_asset`
+  only records a storage key, it never transfers bytes. In S3 mode the
+  worker fails fast with a clear `PipelineError` at the start of
+  `run_job()` rather than silently corrupting state, but the S3 path is not
+  actually usable end-to-end until that worker-side download/upload logic
+  is added. `STORAGE_PROVIDER=local` (the default) is fully implemented and
+  is what both the automated tests and the `bullmq-smoke-test` CI job use.
 
 ## Repository structure
 
