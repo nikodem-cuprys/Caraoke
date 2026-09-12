@@ -1,0 +1,200 @@
+// SingLearn data model.
+//
+// Dev default datasource is SQLite so the whole stack runs with zero
+// external infrastructure (no Docker required). For production, switch
+// `provider` to "postgresql" and point DATABASE_URL at a Postgres instance
+// -- the schema intentionally avoids Postgres-only features (native arrays,
+// enums) so that swap does not require model changes. See README.md
+// "Database" section.
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Prisma requires a static provider (it cannot come from env()). This is
+// "sqlite" so the project runs with zero external infrastructure. For a
+// production deployment, change this to "postgresql", point DATABASE_URL at
+// your Postgres instance, delete prisma/migrations/, and run
+// `npx prisma migrate dev` once to generate a fresh Postgres migration. No
+// application code needs to change for that swap.
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Song {
+  id                     String   @id @default(cuid())
+  title                  String
+  artist                 String?
+  thumbnailUrl           String?
+  durationSec            Float
+  language               String?
+  languageIsUserOverride Boolean  @default(false)
+  // Not unique: this hash is deliberately shared across Song rows when the
+  // exact same audio bytes are uploaded twice, which is how the processing
+  // cache in songService.attachUploadedAudio detects reusable results.
+  contentHash            String   @default("")
+  clientOwnerId          String
+  vocalRangeJson         String?
+  keyEstimateJson        String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  source           SourceReference?
+  assets           AudioAsset[]
+  job              ProcessingJob?
+  sections         SongSection[]
+  lines            LyricLine[]
+  melodyNotes      MelodyNote[]
+  difficultParts   DifficultPart[]
+  practiceSessions PracticeSession[]
+
+  @@index([clientOwnerId])
+  @@index([contentHash])
+}
+
+model SourceReference {
+  id                 String  @id @default(cuid())
+  songId             String  @unique
+  song               Song    @relation(fields: [songId], references: [id], onDelete: Cascade)
+  kind               String // "youtube" | "upload_only"
+  youtubeVideoId     String?
+  youtubeUrl         String?
+  channelTitle       String?
+  sourceThumbnailUrl String?
+  sourceDurationSec  Float?
+}
+
+model AudioAsset {
+  id           String   @id @default(cuid())
+  songId       String
+  song         Song     @relation(fields: [songId], references: [id], onDelete: Cascade)
+  kind         String // original_upload | prepared_reference | vocals | instrumental | pitch_frames_json | waveform_json
+  storageKey   String
+  mimeType     String?
+  durationSec  Float?
+  sizeBytes    Int?
+  providerName String?
+  createdAt    DateTime @default(now())
+
+  @@index([songId, kind])
+}
+
+model ProcessingJob {
+  id              String   @id @default(cuid())
+  songId          String   @unique
+  song            Song     @relation(fields: [songId], references: [id], onDelete: Cascade)
+  status          String // queued | running | complete | failed
+  audioSourceKind String // user_upload | licensed | authorized_remote
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  stages ProcessingStage[]
+}
+
+model ProcessingStage {
+  id         String    @id @default(cuid())
+  jobId      String
+  job        ProcessingJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  name       String
+  order      Int
+  status     String // pending | running | done | failed | skipped
+  progress   Float?
+  startedAt  DateTime?
+  finishedAt DateTime?
+  error      String?
+  detail     String?
+
+  @@unique([jobId, name])
+}
+
+model LyricLine {
+  id        String  @id @default(cuid())
+  songId    String
+  song      Song    @relation(fields: [songId], references: [id], onDelete: Cascade)
+  index     Int
+  start     Float
+  end       Float
+  sectionId String?
+
+  words LyricWord[]
+
+  @@index([songId])
+}
+
+model LyricWord {
+  id              String   @id @default(cuid())
+  lineId          String
+  line            LyricLine @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  index           Int
+  text            String
+  start           Float
+  end             Float
+  confidence      Float
+  isUserCorrected Boolean  @default(false)
+
+  corrections UserCorrection[]
+
+  @@index([lineId])
+}
+
+model UserCorrection {
+  id           String   @id @default(cuid())
+  wordId       String
+  word         LyricWord @relation(fields: [wordId], references: [id], onDelete: Cascade)
+  previousText String
+  newText      String
+  correctedAt  DateTime @default(now())
+  clientId     String?
+}
+
+model SongSection {
+  id          String  @id @default(cuid())
+  songId      String
+  song        Song    @relation(fields: [songId], references: [id], onDelete: Cascade)
+  type        String
+  label       String
+  start       Float
+  end         Float
+  confidence  Float
+  isEstimated Boolean @default(true)
+
+  @@index([songId])
+}
+
+model MelodyNote {
+  id              String @id @default(cuid())
+  songId          String
+  song            Song   @relation(fields: [songId], references: [id], onDelete: Cascade)
+  start           Float
+  end             Float
+  midi            Int
+  noteName        String
+  confidence      Float
+  meanFrequencyHz Float
+
+  @@index([songId])
+}
+
+model DifficultPart {
+  id       String @id @default(cuid())
+  songId   String
+  song     Song   @relation(fields: [songId], references: [id], onDelete: Cascade)
+  start    Float
+  end      Float
+  reason   String
+  detail   String
+  severity Float
+
+  @@index([songId])
+}
+
+model PracticeSession {
+  id        String    @id @default(cuid())
+  songId    String
+  song      Song      @relation(fields: [songId], references: [id], onDelete: Cascade)
+  clientId  String
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+
+  @@index([songId])
+}

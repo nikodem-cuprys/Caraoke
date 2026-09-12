@@ -1,0 +1,92 @@
+# Optional infrastructure for a closer-to-production local setup
+# (Postgres + Redis + MinIO instead of the zero-infra SQLite/local-disk/
+# DB-backed-queue defaults documented in README.md "Local Setup").
+#
+# The web, API, and worker processes are NOT run here by design: running
+# them on the host (not in containers) gives much faster iteration for
+# active development (see README.md "Docker Development"). Point the API's
+# .env at these services and run `npm run dev:api` / `npm run dev:web` /
+# the worker as usual.
+#
+# Usage:
+#   docker compose up -d
+# Then in apps/api/.env:
+#   DATABASE_PROVIDER=postgresql
+#   DATABASE_URL=postgresql://singlearn:singlearn@localhost:5432/singlearn
+#   QUEUE_PROVIDER=bullmq
+#   REDIS_URL=redis://localhost:6379
+#   STORAGE_PROVIDER=s3
+#   S3_ENDPOINT=http://localhost:9000
+#   S3_BUCKET=singlearn
+#   S3_REGION=us-east-1
+#   AWS_ACCESS_KEY_ID=singlearn
+#   AWS_SECRET_ACCESS_KEY=singlearn-secret
+name: singlearn
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: singlearn
+      POSTGRES_PASSWORD: singlearn
+      POSTGRES_DB: singlearn
+    ports:
+      - "5432:5432"
+    volumes:
+      - singlearn-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U singlearn"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - singlearn-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: singlearn
+      MINIO_ROOT_PASSWORD: singlearn-secret
+    ports:
+      - "9000:9000" # S3 API
+      - "9001:9001" # Web console
+    volumes:
+      - singlearn-minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot job: creates the "singlearn" bucket on first startup so the API
+  # doesn't need IAM permissions to create buckets itself.
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+        mc alias set local http://minio:9000 singlearn singlearn-secret &&
+        mc mb -p local/singlearn &&
+        echo 'bucket ready'
+      "
+
+volumes:
+  singlearn-postgres-data:
+  singlearn-redis-data:
+  singlearn-minio-data:

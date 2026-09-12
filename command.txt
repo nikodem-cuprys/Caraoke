@@ -1,0 +1,1821 @@
+# ROLE
+
+You are a senior full-stack engineer, audio/DSP engineer, machine-learning engineer, UX designer, and technical architect.
+
+Your task is to DESIGN, IMPLEMENT, TEST, and DOCUMENT a production-quality web application that helps users learn how to sing songs.
+
+The main user experience must be extremely simple:
+
+1. User pastes a YouTube link.
+2. The application identifies the song/video.
+3. The application obtains or asks for an authorized audio source when required.
+4. The application processes the song.
+5. After processing, the user receives an interactive karaoke-learning experience containing:
+
+   * synchronized lyrics,
+   * word highlighting,
+   * instrumental/backing track where legally available,
+   * isolated/reference vocals where permitted,
+   * detected melody/pitch,
+   * visual pitch guidance,
+   * playback controls designed for practicing difficult sections.
+
+Do NOT produce only an architecture document, mockup, pseudocode, or proof of concept.
+
+If you have access to a development environment, actually create the project, install dependencies, run it, test it, fix errors, and leave a working application.
+
+---
+
+# PRODUCT CONCEPT
+
+Build a web application tentatively called:
+
+**SingLearn**
+
+The application should help someone learn both:
+
+1. the WORDS of a song,
+2. the TONES / MELODY of a song.
+
+The goal is not merely to display lyrics.
+
+The application should act like an interactive singing teacher.
+
+The ideal workflow is:
+
+`Paste YouTube URL`
+
+→ `Analyze song`
+
+→ `Create karaoke project`
+
+→ `Practice song`
+
+The user should need as little technical knowledge as possible.
+
+---
+
+# CRITICAL LEGAL / PLATFORM REQUIREMENT
+
+Do not build the system around unauthorized downloading or circumvention of YouTube protections.
+
+Verify current YouTube API/Terms requirements before implementing the ingestion layer.
+
+Prefer:
+
+* official YouTube APIs for metadata,
+* embedded YouTube playback where appropriate,
+* licensed/authorized audio sources,
+* audio uploaded directly by the user,
+* media for which the user owns or has permission to process.
+
+If arbitrary extraction of audio from a pasted YouTube URL is not allowed by the relevant platform terms or deployment environment, do NOT secretly circumvent those restrictions.
+
+Instead:
+
+1. accept the YouTube link for song identification and playback reference,
+2. ask the user to provide an authorized audio file when processing requires direct audio access,
+3. keep the audio-source layer modular so properly licensed providers can later be added.
+
+Design this as:
+
+`AudioSourceProvider`
+
+with implementations such as:
+
+`UserUploadAudioProvider`
+
+`LicensedAudioProvider`
+
+and, only when permitted:
+
+`AuthorizedRemoteAudioProvider`.
+
+The rest of the product must work regardless of which authorized audio source is used.
+
+---
+
+# PRIMARY USER FLOW
+
+## Step 1 — Paste link
+
+Homepage should have one dominant input:
+
+**Paste YouTube song link**
+
+Example:
+
+`https://www.youtube.com/watch?v=...`
+
+Button:
+
+**Create Karaoke**
+
+Validate the URL.
+
+Retrieve available metadata such as:
+
+* title,
+* artist/channel,
+* thumbnail,
+* duration.
+
+Show the recognized song to the user.
+
+---
+
+# STEP 2 — PROCESSING
+
+Create a processing pipeline with clearly visible stages.
+
+Example UI:
+
+Analyzing audio
+
+`✓ Audio prepared`
+
+`✓ Detecting vocals`
+
+`✓ Transcribing lyrics`
+
+`✓ Synchronizing words`
+
+`✓ Detecting melody`
+
+`✓ Creating practice track`
+
+`✓ Building karaoke`
+
+Do not display fake percentages.
+
+Use real pipeline progress/status information.
+
+Processing must run asynchronously on backend workers rather than blocking an HTTP request.
+
+---
+
+# AUDIO ANALYSIS PIPELINE
+
+Create a modular pipeline similar to:
+
+Audio source
+
+→ audio normalization
+
+→ vocal/instrument separation
+
+→ speech/singing transcription
+
+→ word-level alignment
+
+→ vocal pitch extraction
+
+→ phrase/line segmentation
+
+→ confidence analysis
+
+→ karaoke project generation.
+
+Each pipeline stage must be independently testable.
+
+---
+
+# VOCAL SEPARATION
+
+Where legally permitted and technically appropriate, separate the source into at least:
+
+1. vocals,
+2. accompaniment/instrumental.
+
+Evaluate modern source-separation approaches before choosing an implementation.
+
+Possible technologies include current maintained versions of:
+
+* Demucs,
+* MDX-based models,
+* Open-Unmix,
+* or another high-quality source-separation model.
+
+Do NOT select a model solely because it is listed in this prompt.
+
+Compare current quality, licensing, hardware requirements, inference speed, and maintenance status.
+
+The separation system should ideally output:
+
+`vocals.wav`
+
+and
+
+`instrumental.wav`
+
+Optionally support additional stems later:
+
+* drums,
+* bass,
+* other.
+
+Cache processed results so identical authorized audio does not need to be processed repeatedly.
+
+---
+
+# LYRICS TRANSCRIPTION
+
+Automatically determine the sung words.
+
+Use a high-quality speech/singing transcription system.
+
+Investigate current maintained models/services.
+
+Potential options may include:
+
+* Whisper-family models,
+* WhisperX,
+* commercial speech-to-text APIs,
+* music/singing-specific transcription systems.
+
+The goal is not only sentence transcription.
+
+We need:
+
+**word-level timestamps.**
+
+Each word should eventually have approximately:
+
+```json
+{
+  "word": "example",
+  "start": 42.31,
+  "end": 42.72,
+  "confidence": 0.94
+}
+```
+
+Store confidence.
+
+Do not silently pretend uncertain transcription is correct.
+
+---
+
+# LYRICS ACCURACY
+
+Singing transcription is difficult.
+
+Design a multi-stage approach.
+
+Possible approach:
+
+1. isolate vocals,
+2. transcribe isolated vocals,
+3. obtain word-level timestamps,
+4. segment into lyric lines,
+5. calculate confidence,
+6. let the user correct incorrect words.
+
+Provide a built-in:
+
+**Edit Lyrics**
+
+mode.
+
+The user should be able to change text without destroying synchronization.
+
+If reliable licensed lyrics are available through an authorized lyrics provider, architect a `LyricsProvider` interface to optionally use them.
+
+Never scrape copyrighted lyric sites in violation of their terms.
+
+---
+
+# WORD ALIGNMENT
+
+Lyrics must synchronize precisely with playback.
+
+Use forced alignment or another appropriate technique when transcription alone does not provide sufficient timing accuracy.
+
+Investigate current tools such as modern alignment systems compatible with the selected language/model.
+
+Required data model:
+
+Song
+
+→ Sections
+
+→ Lines
+
+→ Words.
+
+Example:
+
+```json
+{
+  "line": {
+    "start": 35.2,
+    "end": 39.8,
+    "words": [
+      {
+        "text": "hello",
+        "start": 35.2,
+        "end": 35.8
+      }
+    ]
+  }
+}
+```
+
+Word-level timing must drive karaoke highlighting.
+
+---
+
+# LANGUAGE DETECTION
+
+Automatically detect song language.
+
+Support multilingual songs as well as reasonably possible.
+
+Initially prioritize languages well supported by the selected ASR/alignment system.
+
+Show detected language.
+
+Allow user override.
+
+Architect the system so models can vary by language.
+
+---
+
+# MELODY / PITCH EXTRACTION
+
+This is a core feature.
+
+Analyze the isolated lead vocal and estimate the fundamental frequency over time.
+
+Store approximately:
+
+```text
+timestamp
+frequency_Hz
+MIDI_note
+confidence
+```
+
+Investigate current pitch-estimation technologies such as:
+
+* CREPE,
+* torchcrepe,
+* pYIN,
+* Basic Pitch,
+* RMVPE,
+* or another suitable maintained pitch detector.
+
+Evaluate them specifically for **singing vocals**, not ordinary speech.
+
+Ignore or mark:
+
+* silence,
+* unvoiced consonants,
+* unreliable estimates,
+* extremely low-confidence frames.
+
+Smooth obvious pitch-tracking errors without destroying genuine vibrato.
+
+---
+
+# NOTE REPRESENTATION
+
+Convert detected frequencies into musical-note representation.
+
+For example:
+
+`A4 = 440 Hz`
+
+and MIDI/semitone representation.
+
+Use:
+
+`midi = 69 + 12 * log2(frequency / 440)`
+
+where appropriate.
+
+Store continuous pitch deviation rather than forcing every sample immediately onto a perfect note.
+
+This allows the visualization to preserve:
+
+* vibrato,
+* slides,
+* transitions.
+
+---
+
+# MELODY SIMPLIFICATION
+
+Raw pitch extraction will contain thousands of samples.
+
+Create two representations.
+
+### Raw pitch
+
+Used for detailed analysis.
+
+### Simplified melody
+
+Convert the raw contour into understandable singing targets.
+
+Example:
+
+`G4 → A4 → C5 → B4`
+
+Determine note:
+
+* start,
+* end,
+* target pitch,
+* confidence.
+
+Be careful with:
+
+* vibrato,
+* slides,
+* ornamentation,
+* rap,
+* spoken passages,
+* harmonies.
+
+Do not generate fake notes when pitch confidence is poor.
+
+---
+
+# KARAOKE PLAYER
+
+The central screen must combine audio, lyrics, and pitch guidance.
+
+Layout concept:
+
+Top:
+
+Song title
+Artist
+Current section
+
+Middle:
+
+Large current lyric line
+
+Previous line above
+
+Next line below
+
+Current word highlighted based on playback time.
+
+Bottom:
+
+interactive pitch timeline.
+
+The moving playhead should represent current song time.
+
+---
+
+# PITCH VISUALIZATION
+
+Create a visualization similar in concept to singing/rhythm games.
+
+Vertical axis:
+
+pitch / musical notes.
+
+Horizontal axis:
+
+time.
+
+Expected melody appears as note blocks or a smooth target curve.
+
+Example concept:
+
+```text
+C5 |                █████
+B4 |           █████
+A4 |      █████
+G4 | █████
+   +------------------------>
+                time
+```
+
+The visualization must scroll smoothly with playback.
+
+Show current target note.
+
+Example:
+
+**Target: C♯4**
+
+Optional later enhancement:
+
+display piano-key labels on the pitch axis.
+
+---
+
+# IMPORTANT: LYRICS AND PITCH MUST SHARE ONE TIMELINE
+
+The application must use a single canonical timeline.
+
+Playback time drives:
+
+* audio,
+* lyrics,
+* word highlighting,
+* pitch visualization,
+* section indicator.
+
+Avoid separate unsynchronized clocks.
+
+Create a central playback-state mechanism.
+
+---
+
+# PRACTICE MODE
+
+The application is primarily a learning tool.
+
+Provide powerful practice controls.
+
+Required:
+
+Play
+
+Pause
+
+Seek
+
+Previous line
+
+Next line
+
+Rewind 5 seconds
+
+Replay current line
+
+Playback speed
+
+Recommended speeds:
+
+`0.5×`
+
+`0.75×`
+
+`0.9×`
+
+`1.0×`
+
+Where technically possible, slower playback should preserve pitch.
+
+---
+
+# LOOP MODE
+
+User must be able to click a lyric line and select:
+
+**Loop this line**
+
+Playback repeatedly loops that phrase.
+
+Also support:
+
+**Loop section**
+
+Example:
+
+Verse
+
+Chorus
+
+Bridge.
+
+Allow adjustable pre-roll such as:
+
+1–2 seconds before the selected phrase.
+
+This feature is extremely important for learning difficult parts.
+
+---
+
+# LEARNING MODE
+
+Create a special training mode.
+
+For each lyric line show:
+
+Lyrics
+
+Target notes
+
+Optional simplified note names.
+
+Example:
+
+```text
+Lyrics:
+I will always love you
+
+Notes:
+G4   A4   C5   B4  A4
+```
+
+But note-to-word association must only be displayed when confidence is sufficient.
+
+Do not pretend one word always equals one musical note.
+
+A word may contain multiple notes.
+
+Design the data model accordingly.
+
+---
+
+# WORD → SYLLABLE → NOTE
+
+Prepare the architecture for a richer hierarchy:
+
+Line
+
+→ Word
+
+→ Syllable
+
+→ Vocal Note(s).
+
+Exact syllable alignment can be a later enhancement.
+
+For MVP, word timing + continuous pitch is sufficient.
+
+---
+
+# SECTIONS
+
+Automatically attempt to identify logical sections:
+
+Intro
+
+Verse
+
+Pre-Chorus
+
+Chorus
+
+Bridge
+
+Outro
+
+If reliable automatic section identification is unavailable, infer conservatively and allow manual editing.
+
+Users should be able to jump between sections.
+
+---
+
+# VOCAL / INSTRUMENT MIXER
+
+Where processed stems are legally available, provide mixer controls:
+
+Original
+
+Vocals
+
+Instrumental.
+
+Allow levels such as:
+
+Vocals: `0–100%`
+
+Instrumental: `0–100%`
+
+Useful presets:
+
+**Original**
+
+normal reference track.
+
+**Learn**
+
+vocals loud, instrumental quieter.
+
+**Practice**
+
+vocals quiet, instrumental loud.
+
+**Karaoke**
+
+vocals muted.
+
+All stems must remain sample/timeline synchronized.
+
+---
+
+# LEARN WORDS MODE
+
+Create a mode focused only on memorizing lyrics.
+
+Features:
+
+line-by-line playback,
+
+hide selected words,
+
+repeat phrase,
+
+slow playback,
+
+show translation optionally,
+
+click word to replay surrounding phrase.
+
+Possible exercise:
+
+progressively hide words:
+
+Stage 1:
+full lyrics.
+
+Stage 2:
+remove selected words.
+
+Stage 3:
+show first letters only.
+
+Stage 4:
+lyrics hidden.
+
+Make this optional and separate from normal karaoke.
+
+---
+
+# LEARN MELODY MODE
+
+Create a mode focused on melody.
+
+Features:
+
+target pitch curve,
+
+note names,
+
+slow playback,
+
+loop phrase,
+
+reference vocal toggle.
+
+Optional feature:
+
+simple synthesized reference melody generated from detected notes.
+
+This can help the user hear the melody without lyrics.
+
+---
+
+# USER MICROPHONE — ADVANCED FEATURE
+
+Design architecture so the application can later listen to the user through the browser microphone.
+
+When enabled:
+
+microphone
+
+→ live pitch detection
+
+→ compare user pitch against expected pitch.
+
+Visualization:
+
+Target melody = fixed/reference path.
+
+User melody = real-time path.
+
+Calculate difference in cents/semitones.
+
+Example feedback:
+
+`+18 cents`
+
+`-42 cents`
+
+Do not implement simplistic scoring that penalizes normal vibrato.
+
+---
+
+# SINGING SCORE — OPTIONAL ADVANCED FEATURE
+
+If microphone mode is implemented, calculate useful educational metrics.
+
+Possible metrics:
+
+Pitch accuracy
+
+Timing accuracy
+
+Note coverage
+
+Phrase consistency.
+
+Do NOT reduce everything to an unexplained score.
+
+Show useful feedback such as:
+
+"You tend to sing this phrase about 35 cents flat."
+
+"The high note at 1:42 is consistently below the target."
+
+"You enter the second phrase approximately 180 ms late."
+
+Keep feedback encouraging and technical.
+
+---
+
+# PROCESSING ARCHITECTURE
+
+Audio/ML processing can be computationally expensive.
+
+Do not execute heavy ML models inside normal frontend/serverless request handlers.
+
+Recommended architecture:
+
+Frontend:
+
+Next.js
+
+React
+
+TypeScript.
+
+Application/API backend:
+
+TypeScript / Node.js.
+
+Audio/ML worker:
+
+Python.
+
+Potential libraries:
+
+PyTorch
+
+librosa
+
+soundfile
+
+FFmpeg
+
+selected source-separation model
+
+selected transcription/alignment model
+
+selected pitch-detection model.
+
+Queue:
+
+Redis + BullMQ
+
+or a similarly appropriate job queue.
+
+Database:
+
+PostgreSQL.
+
+Object storage:
+
+S3-compatible storage.
+
+---
+
+# HIGH-LEVEL ARCHITECTURE
+
+Design approximately:
+
+```text
+Browser
+   │
+   ▼
+Web Application
+   │
+   ├── YouTube metadata service
+   │
+   ├── API
+   │
+   └── WebSocket / SSE progress
+             │
+             ▼
+         Job Queue
+             │
+             ▼
+        Audio Worker
+             │
+     ┌───────┼─────────┐
+     ▼       ▼         ▼
+Separation  ASR    Pitch Detection
+     │       │         │
+     └───────┼─────────┘
+             ▼
+       Karaoke Builder
+             │
+       ┌─────┴─────┐
+       ▼           ▼
+   PostgreSQL   Object Storage
+```
+
+Use this as guidance rather than an inflexible requirement.
+
+---
+
+# PROCESSING JOBS
+
+Model processing as explicit jobs/stages.
+
+Example:
+
+`FETCH_METADATA`
+
+`VALIDATE_AUDIO_SOURCE`
+
+`PREPARE_AUDIO`
+
+`SEPARATE_STEMS`
+
+`TRANSCRIBE`
+
+`ALIGN_WORDS`
+
+`DETECT_PITCH`
+
+`SIMPLIFY_MELODY`
+
+`SEGMENT_LYRICS`
+
+`GENERATE_WAVEFORM`
+
+`BUILD_KARAOKE`
+
+`COMPLETE`
+
+Persist job status.
+
+If processing fails halfway through, resume when practical rather than restarting everything.
+
+---
+
+# REAL-TIME PROCESSING UI
+
+Use WebSockets or Server-Sent Events.
+
+Example:
+
+```text
+Preparing song          ✓
+Separating vocals       ✓
+Transcribing lyrics     ✓
+Synchronizing words     ✓
+Detecting melody        72%
+Creating karaoke        waiting
+```
+
+Updates must correspond to real processing progress.
+
+---
+
+# DATABASE MODEL
+
+Design normalized entities approximately including:
+
+User
+
+Song
+
+SourceReference
+
+AudioAsset
+
+Stem
+
+ProcessingJob
+
+ProcessingStage
+
+LyricLine
+
+LyricWord
+
+PitchFrame
+
+MelodyNote
+
+SongSection
+
+PracticeSession
+
+UserCorrection.
+
+Exact schema may differ if a better model exists.
+
+---
+
+# SONG DATA MODEL
+
+A processed song should approximately contain:
+
+```json
+{
+  "song": {},
+  "duration": 214.5,
+  "lyrics": [],
+  "pitchFrames": [],
+  "melodyNotes": [],
+  "sections": [],
+  "assets": {
+    "reference": "...",
+    "vocals": "...",
+    "instrumental": "..."
+  }
+}
+```
+
+Do not send millions of pitch samples directly to the browser.
+
+Downsample/segment data appropriately.
+
+---
+
+# AUDIO SYNCHRONIZATION
+
+This is critical.
+
+Separation or audio conversion may introduce timing offsets.
+
+Verify that:
+
+reference track,
+
+vocal stem,
+
+instrumental stem,
+
+lyrics,
+
+pitch contour
+
+all use exactly the same timeline.
+
+Create automated synchronization tests where possible.
+
+Never simply assume model outputs maintain perfect sample alignment.
+
+---
+
+# WAVEFORM
+
+Generate a waveform overview.
+
+Allow clicking waveform position to seek.
+
+Mark:
+
+Verse
+
+Chorus
+
+selected loops
+
+on the waveform where available.
+
+---
+
+# USER CORRECTIONS
+
+AI processing will make mistakes.
+
+The user must be able to correct them.
+
+Allow:
+
+Edit word
+
+Edit lyric line
+
+Move word start/end
+
+Edit section
+
+mark incorrect melody segment.
+
+Eventually these corrections could be used for improving the project, subject to privacy/consent.
+
+Never overwrite user corrections when reprocessing automatically.
+
+---
+
+# CONFIDENCE
+
+Store confidence for:
+
+transcription,
+
+alignment,
+
+pitch detection,
+
+section detection.
+
+Low-confidence regions should be visible.
+
+Example:
+
+**Possible transcription error**
+
+rather than displaying uncertain AI output as fact.
+
+---
+
+# UI DESIGN
+
+Create a polished modern dark-mode music application.
+
+Visual inspiration can come conceptually from:
+
+Spotify
+
+Apple Music
+
+Smule
+
+Yousician
+
+rhythm games
+
+modern DAWs,
+
+but do NOT copy proprietary branding or pixel-identical interfaces.
+
+Primary colors can be chosen by the implementation, but accessibility and contrast matter.
+
+Main screens:
+
+## Landing page
+
+Large:
+
+**Learn any song**
+
+Input:
+
+`Paste a YouTube link`
+
+Button:
+
+`Create Karaoke`
+
+Recent songs below.
+
+## Processing screen
+
+Thumbnail
+
+song title
+
+pipeline status.
+
+## Karaoke screen
+
+player
+
+large lyrics
+
+pitch visualization
+
+practice controls.
+
+## Song library
+
+previously processed songs.
+
+---
+
+# MOBILE SUPPORT
+
+Make the experience responsive.
+
+Desktop is ideal for detailed pitch visualization.
+
+Mobile must still support:
+
+lyrics
+
+playback
+
+word highlighting
+
+looping
+
+speed
+
+basic pitch visualization.
+
+---
+
+# PERFORMANCE
+
+Do not repeatedly process the same audio.
+
+Generate a content fingerprint/hash for authorized source audio.
+
+Cache reusable stages.
+
+Examples:
+
+stem separation
+
+transcription
+
+pitch detection.
+
+Make expensive work idempotent.
+
+---
+
+# HARDWARE
+
+Audio processing must work on CPU where possible.
+
+GPU should substantially accelerate ML workloads when available.
+
+Detect device capabilities.
+
+Make worker configuration support:
+
+`PROCESSING_DEVICE=cpu`
+
+or
+
+`PROCESSING_DEVICE=cuda`.
+
+Do not make local development require a GPU.
+
+---
+
+# PRIVACY
+
+User microphone recordings must not be retained by default.
+
+If recording/storage is implemented:
+
+require explicit opt-in.
+
+Provide deletion.
+
+Protect stored assets using authorization.
+
+Never expose private storage objects publicly by default.
+
+---
+
+# SECURITY
+
+Validate YouTube URLs.
+
+Protect against SSRF.
+
+Never allow arbitrary URLs to be fetched from the backend.
+
+Use allowlists for supported providers.
+
+Validate uploaded media.
+
+Set upload size/duration limits.
+
+Do not execute user-provided files.
+
+Rate-limit expensive processing jobs.
+
+Use signed object-storage URLs.
+
+Never expose API secrets in the frontend.
+
+---
+
+# COST CONTROL
+
+ML audio processing can become expensive.
+
+Design limits such as:
+
+maximum song duration,
+
+maximum concurrent processing jobs,
+
+per-user limits,
+
+job queue limits.
+
+Track processing duration.
+
+Architect for GPU worker scaling.
+
+---
+
+# MVP
+
+The first truly useful version should support:
+
+1. User pastes YouTube URL.
+2. App retrieves song metadata.
+3. User supplies/authorizes processable audio if required.
+4. Backend analyzes song.
+5. Vocals/instrumental are separated when permitted.
+6. Lyrics are automatically transcribed.
+7. Lyrics receive word-level timestamps.
+8. Vocal pitch is extracted.
+9. User opens karaoke player.
+10. Words highlight in time.
+11. Target melody scrolls with playback.
+12. User can slow playback.
+13. User can loop individual lyric lines.
+14. User can switch between reference/learn/karaoke mixes.
+15. User can correct transcription errors.
+
+Do not spend excessive time implementing authentication, subscriptions, social features, or marketing pages before this workflow functions reliably.
+
+---
+
+# FUTURE FEATURES
+
+Prepare clean architecture for:
+
+live microphone pitch comparison,
+
+singing scores,
+
+AI singing feedback,
+
+vocal exercises based on difficult notes,
+
+automatic song key detection,
+
+vocal range detection,
+
+transpose recommendations,
+
+song difficulty,
+
+translations,
+
+phonetic lyrics,
+
+syllable alignment,
+
+multiple singers,
+
+duets,
+
+practice history,
+
+spaced repetition for lyrics,
+
+PWA/mobile app.
+
+Do not allow future features to delay the core MVP.
+
+---
+
+# SPECIAL FEATURE — DIFFICULT PARTS
+
+After pitch extraction, analyze the melody and identify potentially difficult passages.
+
+Possible factors:
+
+large interval jumps,
+
+highest notes,
+
+lowest notes,
+
+long sustained notes,
+
+rapid melodic changes.
+
+Show:
+
+**Difficult Parts**
+
+Example:
+
+`01:14–01:21 — large pitch jump`
+
+`02:03–02:09 — highest note`
+
+Allow one-click looping of the difficult section.
+
+Do not claim difficulty with certainty; present it as an estimate.
+
+---
+
+# SPECIAL FEATURE — VOCAL RANGE
+
+Calculate approximate melody range.
+
+Example:
+
+`Lowest target note: G3`
+
+`Highest target note: E5`
+
+`Range: 21 semitones`
+
+Ignore unreliable pitch frames.
+
+This helps the user understand whether the song fits their range.
+
+---
+
+# SPECIAL FEATURE — KEY / TRANSPOSITION
+
+If reliable key estimation can be implemented, display estimated key.
+
+Example:
+
+`Original key: E major`
+
+Future feature:
+
+allow the practice/reference melody to transpose by:
+
+`-3 ... +3 semitones`
+
+If transposed backing audio is implemented, use high-quality pitch shifting while attempting to preserve tempo.
+
+---
+
+# TESTING
+
+Create unit tests for:
+
+URL validation
+
+timeline conversion
+
+word synchronization
+
+Hz → MIDI conversion
+
+MIDI → note-name conversion
+
+pitch smoothing
+
+melody segmentation
+
+loop boundaries
+
+playback speed calculations
+
+processing-stage transitions.
+
+Create integration tests for:
+
+audio processing pipeline
+
+database persistence
+
+job queue
+
+worker retry behavior
+
+failed processing
+
+successful karaoke generation.
+
+Create end-to-end tests for:
+
+paste URL
+
+start processing
+
+complete processing using test fixture
+
+open karaoke
+
+play
+
+seek
+
+highlight word
+
+loop lyric line
+
+change playback speed.
+
+---
+
+# TEST MEDIA
+
+Do not depend on copyrighted commercial songs for automated tests.
+
+Use:
+
+public-domain audio,
+
+Creative Commons material compatible with testing,
+
+or synthetic test vocals generated specifically for tests.
+
+Include small deterministic fixtures.
+
+---
+
+# VERIFICATION
+
+Before declaring completion:
+
+Run linting.
+
+Run TypeScript type checking.
+
+Run Python formatting/static checks.
+
+Run unit tests.
+
+Run integration tests.
+
+Run end-to-end tests.
+
+Build the production frontend.
+
+Start the services.
+
+Process a legal test song.
+
+Verify separated stems.
+
+Verify transcription.
+
+Verify word synchronization.
+
+Verify pitch extraction.
+
+Verify karaoke highlighting.
+
+Verify phrase looping.
+
+Verify playback speed controls.
+
+Verify frontend/backend synchronization.
+
+Fix errors instead of simply documenting them.
+
+---
+
+# README
+
+Create comprehensive documentation covering:
+
+system architecture,
+
+local setup,
+
+Docker setup,
+
+requirements,
+
+CPU setup,
+
+GPU setup,
+
+environment variables,
+
+database migrations,
+
+object storage,
+
+worker configuration,
+
+supported audio sources,
+
+YouTube integration limitations,
+
+processing pipeline,
+
+models used,
+
+model licenses,
+
+security considerations,
+
+copyright/platform considerations,
+
+deployment,
+
+tests,
+
+known limitations.
+
+Include an architecture diagram.
+
+---
+
+# DOCKER DEVELOPMENT
+
+Provide a convenient development environment.
+
+Prefer something similar to:
+
+```bash
+docker compose up
+```
+
+for infrastructure.
+
+Include services where appropriate for:
+
+PostgreSQL
+
+Redis
+
+S3-compatible local storage such as MinIO.
+
+Allow web/backend development outside containers if that provides faster iteration.
+
+Provide clear commands.
+
+---
+
+# REPOSITORY STRUCTURE
+
+A possible structure:
+
+```text
+apps/
+  web/
+  api/
+  worker/
+
+packages/
+  shared/
+  karaoke-engine/
+  timeline/
+  audio-types/
+
+infra/
+
+tests/
+
+docker-compose.yml
+README.md
+.env.example
+```
+
+Use a better organization if justified.
+
+---
+
+# IMPORTANT ENGINEERING RULES
+
+Do not fake functionality.
+
+Do not show fake processing.
+
+Do not hardcode sample lyrics and call the system complete.
+
+Do not use placeholder pitch data in production paths.
+
+Do not fabricate timestamps.
+
+Do not silently replace missing ML results with fake values.
+
+Do not assume transcription is always correct.
+
+Do not assume pitch detection is always correct.
+
+Do not assume a YouTube URL automatically grants permission to download or process audio.
+
+Keep ML models replaceable behind clean interfaces.
+
+Keep the canonical timeline consistent.
+
+Prefer reliability over unnecessary complexity.
+
+---
+
+# PRODUCT SUCCESS CRITERIA
+
+The project succeeds when a normal user can:
+
+paste a song link,
+
+identify the desired song,
+
+provide/authorize audio where necessary,
+
+have the system automatically process it,
+
+open an interactive karaoke,
+
+see each word highlight at approximately the correct moment,
+
+hear the reference song,
+
+practice with vocals reduced/removed where stems are available,
+
+see the melody they should sing,
+
+understand the target notes,
+
+slow difficult passages,
+
+loop one phrase repeatedly,
+
+and correct AI mistakes.
+
+The application should feel like a combination of:
+
+**karaoke + lyric trainer + melody trainer.**
+
+---
+
+# DEVELOPMENT STRATEGY
+
+Use incremental vertical slices.
+
+First make one legal test song work end-to-end.
+
+Then generalize.
+
+Recommended order:
+
+Phase 1:
+YouTube metadata + authorized audio input + player.
+
+Phase 2:
+background processing architecture.
+
+Phase 3:
+vocal separation.
+
+Phase 4:
+transcription + word synchronization.
+
+Phase 5:
+karaoke lyrics.
+
+Phase 6:
+pitch detection + visualization.
+
+Phase 7:
+practice/loop/speed controls.
+
+Phase 8:
+editing + confidence.
+
+Phase 9:
+optimization + caching.
+
+Phase 10:
+advanced singing features.
+
+However, if you have sufficient execution capability, continue through the phases rather than stopping after describing them.
+
+---
+
+# DECISION-MAKING RULE
+
+Do not stop repeatedly to ask minor implementation questions.
+
+When something is unspecified:
+
+1. choose a sensible production-quality default,
+2. make it configurable,
+3. document the assumption,
+4. continue.
+
+Only ask for information when a decision genuinely cannot be made without user-specific information.
+
+If YouTube audio extraction is legally or technically unavailable, that must NOT stop development.
+
+Implement the compliant fallback:
+
+YouTube URL identifies the song
+
+→ user provides authorized audio
+
+→ processing continues normally.
+
+---
+
+# FIRST ACTIONS
+
+Start now.
+
+1. Inspect the repository if one already exists.
+2. Verify current YouTube API/platform requirements.
+3. Research current maintained source-separation, transcription/alignment, and singing-pitch models.
+4. Check their licenses.
+5. Write a concise architecture decision.
+6. Define the canonical song/timeline data model.
+7. Scaffold the project.
+8. Build one complete vertical slice.
+9. Process a legal test song.
+10. Verify synchronization.
+11. Continue implementing the remaining MVP.
+12. Run tests and fix failures.
+
+Do not stop after producing the plan.
+
+Build the application.

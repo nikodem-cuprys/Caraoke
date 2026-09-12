@@ -1,0 +1,22 @@
+{
+  "name": "singlearn",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/web",
+    "apps/api"
+  ],
+  "scripts": {
+    "build:shared": "npm run build -w @singlearn/shared",
+    "test:shared": "npm run test -w @singlearn/shared",
+    "test:api": "npm run test -w @singlearn/api",
+    "dev:api": "npm run dev -w @singlearn/api",
+    "dev:web": "npm run dev -w @singlearn/web",
+    "test": "npm run test:shared && npm run test:api",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.2"
+  }
+}
