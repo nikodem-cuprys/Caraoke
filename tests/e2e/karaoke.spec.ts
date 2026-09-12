@@ -45,9 +45,27 @@ test("paste a YouTube link, upload authorized audio, process, and practice the r
       .poll(async () => page.locator('[data-testid="lyric-word"][data-active="true"]').count(), { timeout: 8000 })
       .toBeGreaterThan(0);
 
-    await expect
-      .poll(async () => page.evaluate(() => document.querySelector("audio")?.currentTime ?? 0), { timeout: 8000 })
-      .toBeGreaterThan(0);
+    try {
+      await expect
+        .poll(async () => page.evaluate(() => document.querySelector("audio")?.currentTime ?? 0), { timeout: 8000 })
+        .toBeGreaterThan(0);
+    } catch (err) {
+      const diagnostics = await page.evaluate(() => {
+        const audios = Array.from(document.querySelectorAll("audio"));
+        return audios.map((a) => ({
+          src: a.src,
+          readyState: a.readyState,
+          networkState: a.networkState,
+          duration: a.duration,
+          paused: a.paused,
+          muted: a.muted,
+          volume: a.volume,
+          error: a.error ? { code: a.error.code, message: a.error.message } : null,
+        }));
+      });
+      console.log("AUDIO DIAGNOSTICS on failure:", JSON.stringify(diagnostics, null, 2));
+      throw err;
+    }
 
     await page.getByRole("button", { name: "Pause" }).click();
   });
