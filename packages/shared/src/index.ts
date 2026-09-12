@@ -5,5 +5,6 @@ export * from "./youtube";
 export * from "./confidence";
 export * from "./difficulty";
 export * from "./formatting";
+export * from "./vocalRangeFit";
 export * from "./pitchDetection";
 export * from "./singingScore";

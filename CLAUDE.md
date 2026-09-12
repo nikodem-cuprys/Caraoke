@@ -190,3 +190,16 @@ it was part of the original schema scaffolding with no working
 endpoints/UI behind it, the same situation `LicensedAudioProvider` is
 still in. Grep for a model/interface actually being used before assuming a
 feature is unimplemented just because it doesn't show up in the UI yet.
+
+### Vocal range fit check reuses the mic pipeline; it doesn't add a second one
+
+`VocalRangeCard.tsx` runs its own `useMicrophonePitch` instance (separate
+from the one on the practice page's mic-comparison feature) for a two-note
+calibration capture, then calls `evaluateVocalRangeFit`/`estimateHeldNoteMidi`
+(`packages/shared/src/vocalRangeFit.ts`) — both pure and unit-tested. The
+calibrated range is `localStorage`-only (`apps/web/src/lib/vocalRangeStorage.ts`);
+there's no user account to attach it to server-side. Don't test this against
+the repo's synthetic e2e fixture without forcing `song.vocalRange` via route
+interception first (see `tests/e2e/vocalRangeFit.spec.ts`) - like the
+difficulty rating feature, the fixture's TTS "singing" doesn't reliably
+produce a confident melody, so the real field is null for it.

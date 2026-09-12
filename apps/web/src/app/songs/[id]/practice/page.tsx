@@ -4,7 +4,6 @@ import {
   estimateSongDifficulty,
   formatDurationShort,
   formatRelativeTime,
-  midiToNoteName,
   transposeMelodyNotes,
   transposePitchClass,
 } from "@singlearn/shared";
@@ -23,6 +22,7 @@ import { SectionNav } from "@/components/SectionNav";
 import { TransposeControl } from "@/components/TransposeControl";
 import { Waveform } from "@/components/Waveform";
 import { DifficultPartsPanel } from "@/components/DifficultPartsPanel";
+import { VocalRangeCard } from "@/components/VocalRangeCard";
 
 const DIFFICULTY_LABELS: Record<DifficultyLevel, string> = {
   easy: "Easy",
@@ -252,19 +252,17 @@ function Player({
         <div className="card">
           <h3 style={{ marginTop: 0, fontSize: 15 }}>Song insights</h3>
           {song.vocalRange && (
-            <p style={{ fontSize: 13 }}>
-              Vocal range: <strong>{song.vocalRange.lowestNote}</strong> – <strong>{song.vocalRange.highestNote}</strong> (
-              {song.vocalRange.semitoneRange} semitones)
-              {transposeSemitones !== 0 && (
-                <>
-                  {" "}
-                  <span className="text-muted">
-                    → {midiToNoteName(song.vocalRange.lowestMidi + transposeSemitones)}–
-                    {midiToNoteName(song.vocalRange.highestMidi + transposeSemitones)} transposed
-                  </span>
-                </>
-              )}
-            </p>
+            <div style={{ marginBottom: 12 }}>
+              <p style={{ fontSize: 13, marginBottom: 0 }}>
+                Vocal range: <strong>{song.vocalRange.lowestNote}</strong> – <strong>{song.vocalRange.highestNote}</strong>{" "}
+                ({song.vocalRange.semitoneRange} semitones)
+              </p>
+              <VocalRangeCard
+                songRange={song.vocalRange}
+                transposeSemitones={transposeSemitones}
+                onApplyTranspose={setTransposeSemitones}
+              />
+            </div>
           )}
           {song.keyEstimate && (
             <p style={{ fontSize: 13 }}>

@@ -27,6 +27,7 @@ Paste YouTube URL → Analyze song → Create karaoke project → Practice song
 - [Microphone practice](#microphone-practice)
 - [Transpose / key shift](#transpose--key-shift)
 - [Difficulty rating & practice history](#difficulty-rating--practice-history)
+- [Vocal range fit check](#vocal-range-fit-check)
 - [Tests](#tests)
 - [Security considerations](#security-considerations)
 - [Known limitations](#known-limitations)
@@ -426,6 +427,51 @@ that already existed rather than needing new analysis or migrations:
   creates one real session plus one honestly-short (near-zero-duration)
   StrictMode artifact session — this doesn't happen in production builds.
 
+## Vocal range fit check
+
+Command.txt's stated purpose for vocal range detection is direct: "this
+helps the user understand whether the song fits their range." Before this
+feature, the song's range was displayed as plain text with nothing to
+compare it against — this closes that loop:
+
+- **Visual range bar** (`VocalRangeCard.tsx`): renders the song's detected
+  range and, once calibrated, the user's own range on the same MIDI scale,
+  plus an outlined overlay showing where the song's range lands after the
+  current practice-guide transpose (see "Transpose / key shift" above) —
+  all on one shared scale so over/under-lap is visible at a glance.
+- **Mic-based range calibration**: reuses `useMicrophonePitch` (same
+  privacy guarantee as microphone practice — pitch numbers only, audio is
+  never recorded or sent anywhere) for a short two-step capture: hold your
+  lowest comfortable note, then your highest. Each step samples for a fixed
+  window and takes the **mode** of the confident samples' rounded MIDI
+  value (`estimateHeldNoteMidi` in `packages/shared/src/vocalRangeFit.ts`)
+  rather than a mean, so a moment of vibrato at the end of a held note
+  doesn't skew the result between two real semitones. A step that got too
+  little confident signal, or a "highest" note that didn't actually come
+  out higher than the "lowest" one, surfaces a plain retry rather than
+  silently saving a bad range. The result persists in `localStorage`
+  (`apps/web/src/lib/vocalRangeStorage.ts`) — there's no account system to
+  attach it to, and it's just two numbers, so a server round-trip isn't
+  worth it.
+- **Fit check** (`evaluateVocalRangeFit`): compares the song's range
+  against the calibrated one and searches the app's supported -3..+3
+  transpose window for the shift that best fits the song inside it,
+  preferring the smallest shift that fully works. Reports one of three
+  outcomes — fits as-is, fits with a suggested shift (with a one-click
+  "Apply suggested transpose" button wired straight into the existing
+  transpose control), or still out of range even at the best available
+  shift (the song's own span is simply wider than the user's range, no
+  transpose fixes that) — and never overstates confidence: this is a
+  practice aid, not a vocal coach.
+
+Covered in `tests/e2e/vocalRangeFit.spec.ts`. The synthetic test fixture's
+TTS-spoken "singing" doesn't reliably produce a confident melody (the same
+limitation `difficulty rating` above documents), so `song.vocalRange` is
+null against the real pipeline output for it — the tests intercept the
+song fetch to inject a fixed, known range instead, exercising the fit-check
+and calibration UI for real (real mic pipeline, real browser rendering)
+without depending on the fixture producing a specific melody.
+
 ## Tests
 
 ```bash
@@ -440,9 +486,10 @@ npm run test:e2e          # Playwright: paste link -> upload -> full real
                            # pipeline -> play/highlight/loop/speed/transpose/
                            # section-jump/difficulty-estimate/practice-
                            # history, against the synthetic no-copyright
-                           # fixture; plus a microphone-practice test against
-                           # a real Chromium fake audio-capture device (see
-                           # "Microphone practice" above)
+                           # fixture; plus microphone-practice and vocal-
+                           # range-calibration tests against a real Chromium
+                           # fake audio-capture device (see "Microphone
+                           # practice" and "Vocal range fit check" above)
 
 cd apps/worker
 pytest                    # unit tests per pipeline stage, plus real
