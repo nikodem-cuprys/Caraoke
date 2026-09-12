@@ -387,12 +387,13 @@ file from local TTS + a synthesized chord.
   job) — switching `QUEUE_PROVIDER=bullmq` is safe to rely on.
 - `STORAGE_PROVIDER=s3` is implemented end-to-end, including the worker's
   side (download via presigned GET, upload every produced asset via
-  presigned PUT — see [Object storage](#object-storage)), and covered by
+  presigned PUT — see [Object storage](#object-storage)), covered by
   `apps/worker/tests/test_pipeline_remote_storage.py` against a fake local
-  object store. It has not, however, been run against a real S3/MinIO
-  instance in CI (unlike `bullmq-smoke-test`'s real Redis) — do a manual
-  smoke test against `docker-compose.yml`'s MinIO before relying on it in
-  production.
+  object store, and exercised against a real MinIO instance by a dedicated
+  CI job (`.github/workflows/ci.yml`'s `s3-smoke-test`; MinIO runs there as
+  a plain background container rather than a `services:` entry, since that
+  mechanism can't override an image's default command and MinIO's image
+  needs an explicit `server /data`).
 
 ## Repository structure
 
