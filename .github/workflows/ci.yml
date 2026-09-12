@@ -142,6 +142,17 @@ jobs:
       - name: Build shared package
         run: npm run build:shared
 
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Set up virtual audio device (headless Chromium needs a real sink for <audio> playback to advance)
+        run: |
+          sudo apt-get install -y pulseaudio
+          pulseaudio -D --exit-idle-time=-1 --disallow-exit
+          sleep 1
+          pactl load-module module-null-sink sink_name=DummyOutput
+          pactl set-default-sink DummyOutput
+
       - name: Set up API against real Redis (queue only; storage/DB stay local/SQLite)
         working-directory: apps/api
         run: |
@@ -203,6 +214,14 @@ jobs:
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
+
+      - name: Set up virtual audio device (headless Chromium needs a real sink for <audio> playback to advance)
+        run: |
+          sudo apt-get install -y pulseaudio
+          pulseaudio -D --exit-idle-time=-1 --disallow-exit
+          sleep 1
+          pactl load-module module-null-sink sink_name=DummyOutput
+          pactl set-default-sink DummyOutput
 
       - name: Set up API (Prisma + SQLite)
         working-directory: apps/api

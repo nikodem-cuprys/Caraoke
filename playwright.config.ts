@@ -18,7 +18,17 @@ export default defineConfig({
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    {
+      name: "chromium",
+      // Force the full Chromium binary rather than Playwright's default
+      // headless-shell build for headless runs: headless-shell strips
+      // media codec support, which silently prevents the karaoke
+      // player's <audio> elements from ever advancing currentTime in CI
+      // (autoplay itself "succeeds," decoding just never progresses).
+      use: { ...devices["Desktop Chrome"], channel: "chromium" },
+    },
+  ],
   webServer: [
     {
       command: "npm run dev -w @singlearn/api",
