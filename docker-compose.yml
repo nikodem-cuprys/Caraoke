@@ -55,7 +55,11 @@ services:
       retries: 10
 
   minio:
-    image: minio/minio:latest
+    # quay.io, not Docker Hub's minio/minio - MinIO Inc. has removed that
+    # repository from Docker Hub (`docker pull minio/minio` now fails with
+    # "repository does not exist"); quay.io/minio/minio is the current
+    # public image.
+    image: quay.io/minio/minio:latest
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
@@ -75,7 +79,7 @@ services:
   # One-shot job: creates the "singlearn" bucket on first startup so the API
   # doesn't need IAM permissions to create buckets itself.
   minio-init:
-    image: minio/mc:latest
+    image: quay.io/minio/mc:latest
     depends_on:
       minio:
         condition: service_healthy

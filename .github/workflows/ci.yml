@@ -212,18 +212,22 @@ jobs:
           key: ml-models-${{ hashFiles('apps/worker/requirements.txt') }}
 
       # MinIO can't run as a GitHub Actions `services:` container: that
-      # mechanism has no way to override an image's ENTRYPOINT/CMD, and
-      # minio/minio's default CMD (bare `minio`) only prints its own CLI
-      # help and exits rather than starting the server - it needs an
-      # explicit `server /data` command. Starting it as a plain background
-      # container instead gives full control over that command.
+      # mechanism has no way to override an image's ENTRYPOINT/CMD, and the
+      # image's default CMD (bare `minio`) only prints its own CLI help and
+      # exits rather than starting the server - it needs an explicit
+      # `server /data` command. Starting it as a plain background container
+      # instead gives full control over that command. Pulled from quay.io,
+      # not Docker Hub's minio/minio - MinIO Inc. restricted anonymous
+      # pulls of that repository (confirmed via `docker pull`: "pull access
+      # denied ... repository does not exist"), quay.io/minio/minio is the
+      # current public mirror.
       - name: Start MinIO
         run: |
           docker run -d --name minio \
             -p 9000:9000 -p 9001:9001 \
             -e MINIO_ROOT_USER=singlearn \
             -e MINIO_ROOT_PASSWORD=singlearn-secret \
-            minio/minio:latest server /data --console-address ":9001"
+            quay.io/minio/minio:latest server /data --console-address ":9001"
 
       - name: Wait for MinIO and create the bucket
         run: |
