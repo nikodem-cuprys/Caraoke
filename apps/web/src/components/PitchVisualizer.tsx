@@ -1,14 +1,25 @@
 "use client";
 
-import { midiToNoteName } from "@singlearn/shared";
+import { centsOffFromMidi, hzToMidi, midiToNoteName } from "@singlearn/shared";
 import type { MelodyNoteDTO } from "@singlearn/shared";
+import type { LivePitchSample } from "@/lib/useMicrophonePitch";
 import { useEffect, useRef } from "react";
 
 const PAST_WINDOW_SEC = 2.5;
 const FUTURE_WINDOW_SEC = 5.5;
 const PLAYHEAD_FRACTION = PAST_WINDOW_SEC / (PAST_WINDOW_SEC + FUTURE_WINDOW_SEC);
+const LIVE_PITCH_MIN_CONFIDENCE = 0.5;
 
-export function PitchVisualizer({ notes, currentTime }: { notes: MelodyNoteDTO[]; currentTime: number }) {
+export function PitchVisualizer({
+  notes,
+  currentTime,
+  liveUserSamples,
+}: {
+  notes: MelodyNoteDTO[];
+  currentTime: number;
+  /** Recent microphone pitch samples (see useMicrophonePitch) to overlay as the user's real-time path against the target melody. Omit entirely when mic practice isn't enabled. */
+  liveUserSamples?: LivePitchSample[];
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -43,7 +54,11 @@ export function PitchVisualizer({ notes, currentTime }: { notes: MelodyNoteDTO[]
       return;
     }
 
-    const midis = notes.map((n) => n.midi);
+    const visibleUserSamples = (liveUserSamples ?? []).filter(
+      (s) => s.frequencyHz !== null && s.confidence >= LIVE_PITCH_MIN_CONFIDENCE && s.t >= windowStart && s.t <= windowEnd
+    );
+
+    const midis = notes.map((n) => n.midi).concat(visibleUserSamples.map((s) => hzToMidi(s.frequencyHz as number)));
     const minMidi = Math.min(...midis) - 2;
     const maxMidi = Math.max(...midis) + 2;
     const midiRange = Math.max(1, maxMidi - minMidi);
@@ -74,6 +89,29 @@ export function PitchVisualizer({ notes, currentTime }: { notes: MelodyNoteDTO[]
       ctx.fill();
     }
 
+    // Live microphone pitch: the user's real-time path, overlaid on the
+    // fixed target curve above so the two are directly comparable at a
+    // glance (small gaps in the line where the user was silent/unvoiced or
+    // the detector wasn't confident are left as gaps, not interpolated
+    // through, so silence never reads as "on pitch").
+    if (visibleUserSamples.length > 0) {
+      ctx.strokeStyle = "#ef5a6f";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      let drawing = false;
+      for (const sample of visibleUserSamples) {
+        const x = timeToX(sample.t);
+        const y = midiToY(hzToMidi(sample.frequencyHz as number));
+        if (!drawing) {
+          ctx.moveTo(x, y);
+          drawing = true;
+        } else {
+          ctx.lineTo(x, y);
+        }
+      }
+      ctx.stroke();
+    }
+
     // Playhead.
     const playheadX = width * PLAYHEAD_FRACTION;
     ctx.strokeStyle = "#f0b429";
@@ -82,18 +120,29 @@ export function PitchVisualizer({ notes, currentTime }: { notes: MelodyNoteDTO[]
     ctx.moveTo(playheadX, 0);
     ctx.lineTo(playheadX, height);
     ctx.stroke();
-  }, [notes, currentTime]);
+  }, [notes, currentTime, liveUserSamples]);
 
   const targetNote = notes.find((n) => currentTime >= n.start && currentTime < n.end);
+  const latestUserSample = liveUserSamples && liveUserSamples.length > 0 ? liveUserSamples[liveUserSamples.length - 1] : null;
+  const liveCentsOff =
+    targetNote && latestUserSample?.frequencyHz && latestUserSample.confidence >= LIVE_PITCH_MIN_CONFIDENCE
+      ? Math.round(centsOffFromMidi(latestUserSample.frequencyHz, targetNote.midi))
+      : null;
 
   return (
     <div ref={containerRef} style={{ width: "100%" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8, flexWrap: "wrap", gap: 8 }}>
         <span className="text-muted" style={{ fontSize: 13 }}>
-          Pitch guide
+          Pitch guide{liveUserSamples ? " — target (teal) vs. your voice (red)" : ""}
         </span>
         <span style={{ fontSize: 15 }}>
           Target: <strong>{targetNote ? midiToNoteName(targetNote.midi) : "—"}</strong>
+          {liveCentsOff !== null && (
+            <span className="text-muted" style={{ marginLeft: 10 }}>
+              You: {liveCentsOff > 0 ? "+" : ""}
+              {liveCentsOff} cents
+            </span>
+          )}
         </span>
       </div>
       <canvas ref={canvasRef} style={{ display: "block", borderRadius: 8, border: "1px solid var(--border)" }} />

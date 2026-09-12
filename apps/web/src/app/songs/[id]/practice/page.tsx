@@ -5,8 +5,10 @@ import type { SongDTO } from "@singlearn/shared";
 import { use, useEffect, useState } from "react";
 import { correctWord, getSong } from "@/lib/apiClient";
 import { usePlayer } from "@/lib/usePlayer";
+import { useMicrophonePitch } from "@/lib/useMicrophonePitch";
 import { LyricsView } from "@/components/LyricsView";
 import { PitchVisualizer } from "@/components/PitchVisualizer";
+import { MicPracticePanel } from "@/components/MicPracticePanel";
 import { PracticeControls } from "@/components/PracticeControls";
 import { Mixer } from "@/components/Mixer";
 import { Waveform } from "@/components/Waveform";
@@ -68,6 +70,7 @@ function Player({
   onSongChanged: (song: SongDTO) => void;
 }) {
   const player = usePlayer(song);
+  const mic = useMicrophonePitch(player.getCurrentTime);
   const activeSection = findActiveSection(song.sections, player.currentTime);
 
   async function handleCorrectWord(wordId: string, text: string) {
@@ -123,7 +126,23 @@ function Player({
       </div>
 
       <div className="card" style={{ marginBottom: 16 }}>
-        <PitchVisualizer notes={song.melodyNotes} currentTime={player.currentTime} />
+        <PitchVisualizer
+          notes={song.melodyNotes}
+          currentTime={player.currentTime}
+          liveUserSamples={mic.permission === "granted" ? mic.samplesRef.current : undefined}
+        />
+        <hr style={{ border: "none", borderTop: "1px solid var(--border)", margin: "16px 0" }} />
+        <MicPracticePanel
+          permission={mic.permission}
+          error={mic.error}
+          latest={mic.latest}
+          start={mic.start}
+          stop={mic.stop}
+          clearHistory={mic.clearHistory}
+          samplesRef={mic.samplesRef}
+          melodyNotes={song.melodyNotes}
+          lines={song.lines}
+        />
       </div>
 
       <div className="card" style={{ marginBottom: 16 }}>

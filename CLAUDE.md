@@ -131,3 +131,14 @@ Demucs (separation, MIT), faster-whisper (transcription + word timestamps,
 MIT), librosa `pyin` (pitch detection, ISC, no pretrained model). All three
 only ever run inside `apps/worker`, invoked by the queue — never call an ML
 model from an API request handler.
+
+### Microphone practice is entirely client-side
+
+`packages/shared/src/pitchDetection.ts` (autocorrelation) and
+`singingScore.ts` (turns samples into a few specific sentences, never a
+bare score) are pure and unit-tested; `apps/web/src/lib/useMicrophonePitch.ts`
+does the Web Audio plumbing. No microphone audio is ever recorded or sent
+to the server — this isn't a policy choice layered on top, it's the whole
+design (only `{time, frequencyHz, confidence}` numbers ever leave the
+`AnalyserNode`). Don't add server involvement to this feature without
+re-reading README's "Microphone practice" section first.

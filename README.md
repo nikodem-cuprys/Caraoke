@@ -24,6 +24,7 @@ Paste YouTube URL → Analyze song → Create karaoke project → Practice song
 - [Database migrations](#database-migrations)
 - [Worker configuration (CPU/GPU)](#worker-configuration-cpugpu)
 - [Object storage](#object-storage)
+- [Microphone practice](#microphone-practice)
 - [Tests](#tests)
 - [Security considerations](#security-considerations)
 - [Known limitations](#known-limitations)
@@ -310,6 +311,65 @@ by `STORAGE_PROVIDER`:
   for the object store, so this path is covered without needing a real
   S3/MinIO instance in CI).
 
+## Microphone practice
+
+An entirely client-side feature (`apps/web/src/lib/useMicrophonePitch.ts`,
+`apps/web/src/components/MicPracticePanel.tsx`): the microphone is never
+requested until the user clicks "Enable microphone practice" (explicit
+opt-in, per the spec's privacy requirement), and no audio is ever recorded,
+buffered to disk, or sent to the server in any form — only per-frame
+`{time, frequencyHz, confidence}` numbers are kept, in memory, for as long
+as the feature stays enabled. Disabling it (or navigating away) immediately
+stops the media stream and discards that history.
+
+- **Pitch detection** (`packages/shared/src/pitchDetection.ts`): time-domain
+  autocorrelation with parabolic sub-sample interpolation, run against an
+  `AnalyserNode` buffer roughly 20 times/second. This is a different,
+  lighter algorithm than the worker's offline `librosa.pyin` — pyin is more
+  accurate but far too slow to run per-frame in a browser tab. Same
+  singing-voice frequency range (65–1047Hz) as the worker's `DETECT_PITCH`
+  stage for consistency between the two pitch sources being compared. Pure,
+  dependency-free, and unit-tested against synthetic tones
+  (`pitchDetection.test.ts`), including a check that it doesn't return an
+  octave-doubled/halved frequency for a clean tone — a classic
+  autocorrelation failure mode.
+- **Live comparison**: `PitchVisualizer` overlays the user's real-time path
+  (red) on the fixed target melody (teal) — see command.txt's own ASCII
+  sketch of "target = fixed path, user = real-time path" — plus a live
+  "You: +N cents" / "-N cents" readout (`centsOffFromMidi`) while a
+  confident target note is active, and an always-visible "Listening —
+  detected \<note\>" status the rest of the time (e.g. during an
+  instrumental section) so the user can tell the mic is actually picking
+  something up.
+- **Singing feedback** (`packages/shared/src/singingScore.ts`): "Get
+  feedback on this take" turns the accumulated samples into a short list of
+  specific sentences (pitch tendency, a specific note that's consistently
+  off, late/early phrase entrance, note coverage) — never a single
+  unexplained score, per the spec. Deliberately averages over a whole
+  phrase/note rather than judging every frame, so normal vibrato (which
+  oscillates roughly symmetrically around the target) washes out in the
+  mean instead of being flagged as an error; `singingScore.test.ts` asserts
+  this directly with a synthetic vibrato signal. Low-confidence target
+  notes and low-confidence detected samples are both excluded before any
+  comparison happens, rather than comparing against — or reporting on — a
+  guess.
+- **Testing a browser microphone in CI**:
+  `tests/e2e/microphonePractice.spec.ts` runs against a real Chromium fake
+  audio-capture device fed a synthetic WAV tone
+  (`--use-fake-device-for-media-stream` +
+  `--use-file-for-fake-audio-capture`), exercising the real
+  `getUserMedia` → `AudioContext` → `AnalyserNode` → `autocorrelate()` →
+  React pipeline rather than mocking any of it — the same "test for real"
+  approach as the rest of the suite. Getting the fake device to actually
+  resolve `getUserMedia()` (rather than reject with `NotSupportedError`)
+  additionally requires `--use-fake-ui-for-media-stream`, undocumented
+  anywhere obvious; found by bisecting flag combinations. The test checks
+  the always-visible "Listening — detected \<note\>" status rather than the
+  target-melody overlay, since the checked-in fixture is TTS-spoken rather
+  than sung and doesn't reliably produce a confident target note to compare
+  against — that's a property of the test fixture, not something specific
+  to the mic feature.
+
 ## Tests
 
 ```bash
@@ -322,7 +382,10 @@ npm run test:api          # audio probing, rate limiting, and a real SQLite-
                            # content-hash caching
 npm run test:e2e          # Playwright: paste link -> upload -> full real
                            # pipeline -> play/highlight/loop/speed, against
-                           # the synthetic no-copyright fixture
+                           # the synthetic no-copyright fixture; plus a
+                           # microphone-practice test against a real
+                           # Chromium fake audio-capture device (see
+                           # "Microphone practice" above)
 
 cd apps/worker
 pytest                    # unit tests per pipeline stage, plus real
@@ -380,8 +443,16 @@ file from local TTS + a synthesized chord.
   seams, not functioning integrations — no licensed audio partner is wired
   up out of the box, so user upload is the only audio source that actually
   works today.
-- Live microphone pitch comparison and singing-score feedback are designed
-  for (see the `PitchFrame`/confidence data model) but not yet implemented.
+- Live microphone pitch comparison and singing-score feedback are
+  implemented (see [Microphone practice](#microphone-practice)) as an
+  entirely client-side feature: no microphone audio is ever recorded,
+  stored, or sent to the server, satisfying the privacy requirement by
+  construction rather than needing an opt-in/retention policy for
+  recordings that don't exist. Detection accuracy depends on the
+  browser's autocorrelation-based pitch tracker, which is less accurate
+  than the worker's offline `pyin` pipeline (a deliberate speed/accuracy
+  tradeoff for something that has to run every frame in a tab — see
+  `packages/shared/src/pitchDetection.ts`).
 - `BullMqQueueProvider` is exercised by a dedicated CI job against a real
   Redis service container (`.github/workflows/ci.yml`'s `bullmq-smoke-test`
   job) — switching `QUEUE_PROVIDER=bullmq` is safe to rely on.

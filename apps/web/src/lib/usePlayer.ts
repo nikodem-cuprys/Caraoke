@@ -43,6 +43,12 @@ export function usePlayer(song: SongDTO) {
   const stemsAvailable = song.assets.separationAvailable && !!song.assets.vocals && !!song.assets.instrumental;
 
   const [currentTime, setCurrentTime] = useState(0);
+  // Mirrors currentTime for callers that need to read "now" from inside a
+  // callback that must stay stable across every render (e.g. the mic
+  // pitch-detection loop's setInterval) without re-subscribing every frame
+  // the way depending on the currentTime state value directly would.
+  const currentTimeRef = useRef(0);
+  const getCurrentTime = useCallback(() => currentTimeRef.current, []);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackRate, setPlaybackRateState] = useState<PlaybackSpeed>(1.0);
   const [mixerPreset, setMixerPresetState] = useState<MixerPreset>("original");
@@ -168,6 +174,7 @@ export function usePlayer(song: SongDTO) {
       if (el) {
         const t = el.currentTime;
         setCurrentTime(t);
+        currentTimeRef.current = t;
 
         if (loop.region) {
           const seekTo = nextLoopSeekTime(t, loop.region);
@@ -193,6 +200,7 @@ export function usePlayer(song: SongDTO) {
     refs: { referenceRef, vocalsRef, instrumentalRef },
     stemsAvailable,
     currentTime,
+    getCurrentTime,
     isPlaying,
     playbackRate,
     playbackSpeeds: PLAYBACK_SPEEDS,
