@@ -29,6 +29,7 @@ Paste YouTube URL → Analyze song → Create karaoke project → Practice song
 - [Difficulty rating & practice history](#difficulty-rating--practice-history)
 - [Vocal range fit check](#vocal-range-fit-check)
 - [Vocal exercises for difficult passages](#vocal-exercises-for-difficult-passages)
+- [Spaced repetition for review](#spaced-repetition-for-review)
 - [Tests](#tests)
 - [Security considerations](#security-considerations)
 - [Known limitations](#known-limitations)
@@ -510,6 +511,30 @@ is normally empty for it; `tests/e2e/vocalExercise.spec.ts` forces one
 difficult passage and a matching target note via route interception (same
 technique as `vocalRangeFit.spec.ts`) to exercise the full flow for real.
 
+## Spaced repetition for review
+
+Per command.txt FUTURE FEATURES's "spaced repetition for lyrics":
+`computeReviewSchedule` (`packages/shared/src/reviewSchedule.ts`) reuses
+the existing `PracticeSummaryDTO` (`sessionCount`/`lastPracticedAt` -
+already tracked by practice history above, no new schema) to compute a
+per-**song** next-review date on a simple, increasing-interval schedule
+(1, 3, 7, 14, 30, 60 days, indexed by how many times you've practiced it -
+the same shape as a basic Leitner system). This is deliberately scoped to
+whole songs, not individual lines: there's no per-line practice history to
+key a finer schedule off, and no "how well did you recall it" signal to
+calibrate a full SM-2-style ease factor from (this is singing practice,
+not flashcard grading) - a fixed schedule keyed only by repetition count
+is the honest amount of sophistication the available data supports.
+
+- The **library** (homepage) sorts songs due for review to the top (stable
+  sort - everything else keeps the server's newest-first order) and shows
+  a red "Due for review" badge; songs not yet due show a muted "next
+  review due in Nd" instead.
+- The **practice page**'s Song insights panel shows the same badge/estimate
+  next to the existing practice-count line.
+- A never-practiced song has no schedule at all (nothing to review yet) -
+  it's neither due nor "not due," it just doesn't show either indicator.
+
 ## Tests
 
 ```bash
@@ -525,11 +550,13 @@ npm run test:e2e          # Playwright: paste link -> upload -> full real
                            # section-jump/difficulty-estimate/practice-
                            # history, against the synthetic no-copyright
                            # fixture; plus microphone-practice, vocal-range-
-                           # calibration, and difficult-passage-exercise
-                           # tests against a real Chromium fake audio-capture
-                           # device (see "Microphone practice", "Vocal range
-                           # fit check", and "Vocal exercises for difficult
-                           # passages" above)
+                           # calibration, difficult-passage-exercise, and
+                           # spaced-repetition-schedule tests (the last two
+                           # of those against a real Chromium fake audio-
+                           # capture device where relevant - see "Microphone
+                           # practice", "Vocal range fit check", "Vocal
+                           # exercises for difficult passages", and "Spaced
+                           # repetition for review" above)
 
 cd apps/worker
 pytest                    # unit tests per pipeline stage, plus real

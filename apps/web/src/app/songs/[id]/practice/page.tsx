@@ -1,7 +1,9 @@
 "use client";
 
 import {
+  computeReviewSchedule,
   estimateSongDifficulty,
+  formatDueIn,
   formatDurationShort,
   formatRelativeTime,
   transposeMelodyNotes,
@@ -103,6 +105,10 @@ function Player({
         durationSec: song.durationSec,
       }),
     [song.vocalRange, song.difficultParts, song.lines, song.durationSec]
+  );
+  const reviewSchedule = useMemo(
+    () => computeReviewSchedule(song.practiceSummary.sessionCount, song.practiceSummary.lastPracticedAt),
+    [song.practiceSummary.sessionCount, song.practiceSummary.lastPracticedAt]
   );
 
   async function handleCorrectWord(wordId: string, text: string) {
@@ -307,6 +313,15 @@ function Player({
                 )}
                 {song.practiceSummary.lastPracticedAt && (
                   <span className="text-muted"> · last practiced {formatRelativeTime(song.practiceSummary.lastPracticedAt)}</span>
+                )}
+                {reviewSchedule.isDue && (
+                  <>
+                    {" "}
+                    <span className="badge due">Due for review</span>
+                  </>
+                )}
+                {!reviewSchedule.isDue && reviewSchedule.dueAt && (
+                  <span className="text-muted"> · next review {formatDueIn(reviewSchedule.dueAt)}</span>
                 )}
               </>
             )}

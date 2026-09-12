@@ -9,3 +9,4 @@ export * from "./vocalRangeFit";
 export * from "./pitchDetection";
 export * from "./singingScore";
 export * from "./exercisePractice";
+export * from "./reviewSchedule";

@@ -223,3 +223,16 @@ Starting an exercise does not call `player.play()` - like the pre-existing
 must click Play themselves (a real bug this session hit: without it,
 `currentTime` never leaves 0, so mic samples never fall inside the target
 note's window and every attempt reports "not enough signal").
+
+### Spaced repetition is per-song and reuses PracticeSummaryDTO - no new schema
+
+`computeReviewSchedule` (`packages/shared/src/reviewSchedule.ts`) derives a
+next-review date purely from `sessionCount`/`lastPracticedAt`, both of
+which `summarizePracticeSessions` in `songService.ts` already computes.
+Don't add a per-line schedule or a real SM-2 ease factor without a good
+reason - there's no per-line practice history and no recall-quality signal
+to calibrate an ease factor from, so the fixed Leitner-style interval list
+is deliberate, not a placeholder for something fancier. The homepage
+(`apps/web/src/app/page.tsx`) computes each song's schedule client-side
+and stable-sorts due songs to the top of the existing server order; the
+API's `/api/songs` ordering itself is untouched.

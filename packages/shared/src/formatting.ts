@@ -43,3 +43,26 @@ export function formatRelativeTime(isoTimestamp: string, nowMs: number = Date.no
   const diffYear = Math.round(diffMonth / 12);
   return `${diffYear} year${diffYear === 1 ? "" : "s"} ago`;
 }
+
+/**
+ * Formats a future ISO timestamp (e.g. a spaced-repetition review's dueAt)
+ * as a short relative string: "due now", "due in 5 hours", "due in 3
+ * days". A separate function from formatRelativeTime rather than a signed
+ * version of it - that one's rounding/threshold choices are tuned for
+ * "how long ago," which reads oddly applied to the future (e.g. "in -3
+ * days ago").
+ */
+export function formatDueIn(isoTimestamp: string, nowMs: number = Date.now()): string {
+  const dueMs = new Date(isoTimestamp).getTime();
+  const diffSec = Math.round((dueMs - nowMs) / 1000);
+  if (diffSec <= 0) return "due now";
+
+  const diffMin = Math.round(diffSec / 60);
+  if (diffMin < 60) return `due in ${diffMin} minute${diffMin === 1 ? "" : "s"}`;
+
+  const diffHour = Math.round(diffMin / 60);
+  if (diffHour < 24) return `due in ${diffHour} hour${diffHour === 1 ? "" : "s"}`;
+
+  const diffDay = Math.round(diffHour / 24);
+  return `due in ${diffDay} day${diffDay === 1 ? "" : "s"}`;
+}

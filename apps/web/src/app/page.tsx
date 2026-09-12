@@ -1,7 +1,7 @@
 "use client";
 
-import { formatRelativeTime, isValidYoutubeUrl } from "@singlearn/shared";
-import { useEffect, useRef, useState } from "react";
+import { computeReviewSchedule, formatDueIn, formatRelativeTime, isValidYoutubeUrl } from "@singlearn/shared";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ApiError,
@@ -27,6 +27,23 @@ export default function HomePage() {
       .then(setSongs)
       .catch(() => setSongs([]));
   }, []);
+
+  // Spaced repetition (command.txt FUTURE FEATURES): rank songs due for
+  // review to the top of the library, stable-sorted so everything else
+  // keeps the server's newest-first order. `now` is captured once per
+  // songs-list fetch rather than read fresh per song, so every card in one
+  // render is judged against the same instant.
+  const now = useMemo(() => new Date(), [songs]);
+  const rankedSongs = useMemo(
+    () =>
+      songs
+        .map((song) => ({
+          song,
+          schedule: computeReviewSchedule(song.practiceSummary.sessionCount, song.practiceSummary.lastPracticedAt, now),
+        }))
+        .sort((a, b) => Number(b.schedule.isDue) - Number(a.schedule.isDue)),
+    [songs, now]
+  );
 
   async function handleCreateKaraoke() {
     setError(null);
@@ -147,9 +164,10 @@ export default function HomePage() {
         <div style={{ marginTop: 56 }}>
           <h2 style={{ fontSize: 20, marginBottom: 16 }}>Your songs</h2>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16 }}>
-            {songs.map((song) => (
+            {rankedSongs.map(({ song, schedule }) => (
               <a
                 key={song.id}
+                data-testid="song-card"
                 href={song.status === "complete" ? `/songs/${song.id}/practice` : `/songs/${song.id}/processing`}
                 className="card"
                 style={{ display: "block", textDecoration: "none" }}
@@ -164,8 +182,11 @@ export default function HomePage() {
                 )}
                 <div style={{ fontWeight: 600 }}>{song.title}</div>
                 {song.artist && <div className="text-muted" style={{ fontSize: 14 }}>{song.artist}</div>}
-                <div className="badge" style={{ marginTop: 8 }}>
-                  {song.status === "complete" ? "Ready to practice" : song.status === "failed" ? "Failed" : "Processing…"}
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                  <div className="badge">
+                    {song.status === "complete" ? "Ready to practice" : song.status === "failed" ? "Failed" : "Processing…"}
+                  </div>
+                  {schedule.isDue && <div className="badge due">Due for review</div>}
                 </div>
                 {song.practiceSummary.sessionCount > 0 && (
                   <div className="text-muted" style={{ fontSize: 12, marginTop: 6 }}>
@@ -173,6 +194,7 @@ export default function HomePage() {
                     {song.practiceSummary.lastPracticedAt && (
                       <> · last {formatRelativeTime(song.practiceSummary.lastPracticedAt)}</>
                     )}
+                    {!schedule.isDue && schedule.dueAt && <> · next review {formatDueIn(schedule.dueAt)}</>}
                   </div>
                 )}
               </a>

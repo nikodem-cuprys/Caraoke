@@ -126,3 +126,9 @@ input[type="range"] {
   border-color: var(--warn);
   color: var(--warn);
 }
+
+.badge.due {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}

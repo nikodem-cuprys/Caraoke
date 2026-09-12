@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDurationShort, formatRelativeTime } from "../formatting";
+import { formatDueIn, formatDurationShort, formatRelativeTime } from "../formatting";
 
 describe("formatDurationShort", () => {
   it.each([
@@ -41,5 +41,25 @@ describe("formatRelativeTime", () => {
 
   it("never reports a negative/future time as ago", () => {
     expect(formatRelativeTime(new Date(now + 10_000).toISOString(), now)).toBe("just now");
+  });
+});
+
+describe("formatDueIn", () => {
+  const now = new Date("2026-01-01T12:00:00.000Z").getTime();
+
+  it("reports a past or current timestamp as due now", () => {
+    expect(formatDueIn(new Date(now - 10_000).toISOString(), now)).toBe("due now");
+    expect(formatDueIn(new Date(now).toISOString(), now)).toBe("due now");
+  });
+
+  it.each([
+    [5 * 60_000, "due in 5 minutes"],
+    [60_000, "due in 1 minute"],
+    [3 * 3_600_000, "due in 3 hours"],
+    [3_600_000, "due in 1 hour"],
+    [2 * 86_400_000, "due in 2 days"],
+    [86_400_000, "due in 1 day"],
+  ])("%i ms from now -> %s", (msAhead, expected) => {
+    expect(formatDueIn(new Date(now + msAhead).toISOString(), now)).toBe(expected);
   });
 });
